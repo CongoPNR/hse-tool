@@ -1,0 +1,3188 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Root Cause Explorer v2 — Process Safety</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,600;0,700;1,300&display=swap');
+:root {
+  --ci-dark:#C0392B; --ci-mid:#E74C3C; --ci-light:#FADBD8;
+  --cc-dark:#D35400; --cc-mid:#E67E22; --cc-light:#FDEBD0;
+  --cp-dark:#145A32; --cp-mid:#1E8449; --cp-light:#D5F5E3;
+  --acc:#7D3C98;     --acc-mid:#9B59B6; --acc-light:#E8DAEF;
+  --bg:#0F1117; --surface:#181C26; --surface2:#1E2330; --surface3:#232840;
+  --border:#2A2F3F; --text:#E8EAF0; --text-dim:#8892A4; --text-dimmer:#4A5268;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+
+/* ── NAV TABS ── */
+.app-nav{display:flex;background:var(--surface);border-bottom:1px solid var(--border);padding:0 40px;position:sticky;top:0;z-index:200;}
+.nav-tab{padding:16px 24px;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-dimmer);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;}
+.nav-tab:hover{color:var(--text-dim);}
+.nav-tab.active{color:var(--text);border-bottom-color:var(--cc-mid);}
+.nav-tab .tab-icon{margin-right:7px;}
+
+/* ── HEADER ── */
+.app-header{padding:28px 40px 20px;background:var(--surface);border-bottom:1px solid var(--border);}
+.header-row{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;}
+.header-kicker{font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px;}
+.header-title{font-size:21px;font-weight:700;letter-spacing:-.02em;}
+.header-sub{font-size:12px;color:var(--text-dim);font-style:italic;margin-top:3px;}
+.btn-reset{background:none;border:1px solid var(--border);color:var(--text-dim);font-family:'IBM Plex Mono',monospace;font-size:11px;padding:7px 13px;border-radius:6px;cursor:pointer;transition:all .2s;}
+.btn-reset:hover{border-color:var(--text-dim);color:var(--text);}
+
+/* ── PROGRESS BAR ── */
+.inv-bar{display:flex;margin-top:18px;background:var(--surface2);border-radius:8px;overflow:hidden;border:1px solid var(--border);}
+.inv-step{flex:1;padding:9px 14px;font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dimmer);display:flex;align-items:center;gap:7px;border-right:1px solid var(--border);cursor:pointer;transition:all .25s;}
+.inv-step:last-child{border-right:none;}
+.inv-step.active{color:var(--text);}
+.inv-step.done{color:var(--text-dim);cursor:pointer;}
+.inv-step.done:hover{background:rgba(255,255,255,.03);}
+.step-dot{width:7px;height:7px;border-radius:50%;background:var(--text-dimmer);flex-shrink:0;transition:all .25s;}
+.inv-step.active .step-dot{background:#F1C40F;box-shadow:0 0 7px #F1C40F88;}
+.inv-step.done .step-dot{background:#2ECC71;}
+.inv-step.step-ci.active{background:rgba(192,57,43,.15);}
+.inv-step.step-cc.active{background:rgba(211,84,0,.15);}
+.inv-step.step-cp.active{background:rgba(20,90,50,.15);}
+
+/* ── PAGES ── */
+.page{display:none;padding:28px 40px;max-width:1100px;margin:0 auto;}
+.page.active{display:block;}
+
+/* ── SELECTION CHIPS ── */
+.sel-summary{display:none;gap:8px;margin-bottom:22px;flex-wrap:wrap;align-items:center;}
+.sel-summary.visible{display:flex;}
+.sel-chip{display:flex;align-items:center;gap:7px;padding:5px 11px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid;cursor:pointer;transition:opacity .15s;animation:chipIn .2s ease;}
+.sel-chip:hover{opacity:.75;}
+@keyframes chipIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}
+.sel-chip.ci{background:rgba(192,57,43,.15);border-color:var(--ci-mid);color:#FF8070;}
+.sel-chip.cc{background:rgba(211,84,0,.15);border-color:var(--cc-mid);color:#FFB060;}
+.chip-ref{font-family:'IBM Plex Mono',monospace;font-size:9px;opacity:.65;}
+.arrow-sep{color:var(--text-dimmer);font-size:13px;}
+
+/* ── PANELS ── */
+.panel{display:none;animation:panelIn .25s ease;}
+.panel.active{display:block;}
+@keyframes panelIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.panel-header{display:flex;align-items:baseline;gap:10px;margin-bottom:16px;}
+.panel-label{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:3px 9px;border-radius:4px;}
+.panel-label.ci{background:rgba(192,57,43,.2);color:#FF8070;}
+.panel-label.cc{background:rgba(211,84,0,.2);color:#FFB060;}
+.panel-label.cp{background:rgba(20,90,50,.2);color:#60CC88;}
+.panel-instruction{font-size:12px;color:var(--text-dim);font-style:italic;}
+
+/* ── CC TOOLBAR ── */
+.cc-toolbar{display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 14px;margin-bottom:14px;gap:10px;}
+.cc-count{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim);}
+.cc-count span{font-size:14px;font-weight:700;color:var(--cc-mid);margin-right:3px;}
+.btn-confirm{background:var(--cc-dark);border:none;color:#fff;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:600;padding:7px 18px;border-radius:6px;cursor:pointer;transition:all .2s;opacity:.35;pointer-events:none;}
+.btn-confirm.ready{opacity:1;pointer-events:auto;box-shadow:0 2px 10px rgba(211,84,0,.4);}
+.btn-confirm.ready:hover{background:var(--cc-mid);}
+
+/* ── SECTION GROUPS ── */
+.section-group{margin-bottom:5px;}
+.section-header{display:flex;align-items:center;gap:9px;padding:10px 14px;border-radius:8px 8px 0 0;cursor:pointer;user-select:none;transition:filter .15s;border:1px solid transparent;}
+.section-header:hover{filter:brightness(1.1);}
+.section-header.ci{background:var(--ci-dark);border-color:var(--ci-mid);}
+.section-header.cc{background:var(--cc-dark);border-color:var(--cc-mid);}
+.section-header.cp{background:var(--cp-dark);border-color:var(--cp-mid);}
+.section-toggle{font-family:'IBM Plex Mono',monospace;font-size:12px;color:rgba(255,255,255,.55);transition:transform .18s;flex-shrink:0;}
+.section-header.open .section-toggle{transform:rotate(90deg);}
+.section-ref{font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,255,255,.45);flex-shrink:0;}
+.section-title{font-size:12px;font-weight:600;color:#fff;flex:1;}
+.section-count{font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(255,255,255,.4);flex-shrink:0;}
+.entries-container{display:none;border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;overflow:hidden;margin-bottom:7px;}
+.entries-container.open{display:block;}
+
+/* ── ENTRY ROWS ── */
+.entry-row{display:flex;align-items:center;gap:0;cursor:pointer;transition:background .12s;border-bottom:1px solid var(--border);background:var(--surface);}
+.entry-row:last-child{border-bottom:none;}
+.entry-row:hover{background:var(--surface2);}
+.entry-row.selected{background:var(--surface2);}
+.entry-row.selected.ci{background:rgba(192,57,43,.1);border-left:3px solid var(--ci-mid);}
+.entry-row.selected.cc{background:rgba(211,84,0,.1);border-left:3px solid var(--cc-mid);}
+.entry-check{width:18px;height:18px;border:2px solid var(--border);border-radius:4px;margin-left:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;transition:all .12s;color:transparent;}
+.entry-row.selected .entry-check{background:var(--cc-mid);border-color:var(--cc-mid);color:#fff;}
+.entry-ref{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-dimmer);width:66px;flex-shrink:0;padding:11px 8px 11px 14px;transition:color .12s;}
+.entry-row:hover .entry-ref,.entry-row.selected .entry-ref{color:var(--text-dim);}
+.entry-text{flex:1;font-size:12px;color:var(--text);padding:11px 14px 11px 0;line-height:1.45;}
+.entry-arrow{font-size:13px;color:var(--text-dimmer);padding:11px 13px;flex-shrink:0;opacity:0;transition:all .12s;}
+.entry-row:hover .entry-arrow{opacity:1;transform:translateX(2px);}
+
+/* ── ACCIDENT TAGS on entries ── */
+.acc-tags{display:flex;flex-wrap:wrap;gap:4px;padding:0 13px 8px 66px;}
+.acc-tag{font-size:9px;font-family:'IBM Plex Mono',monospace;padding:2px 7px;border-radius:3px;background:rgba(125,60,152,.25);color:#C39BD3;border:1px solid rgba(125,60,152,.4);cursor:pointer;transition:all .15s;}
+.acc-tag:hover{background:rgba(125,60,152,.5);color:#fff;}
+
+/* ── SEARCH ── */
+.search-wrap{position:relative;margin-bottom:16px;}
+.search-input{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 14px 9px 38px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;color:var(--text);outline:none;transition:border-color .2s;}
+.search-input:focus{border-color:var(--text-dim);}
+.search-input::placeholder{color:var(--text-dimmer);}
+.search-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--text-dimmer);font-size:13px;pointer-events:none;}
+.entry-row.hidden{display:none;}
+
+/* ── CP PANEL ── */
+.cp-section-grp{margin-bottom:5px;}
+.cp-section-hdr{display:flex;align-items:center;gap:9px;padding:10px 14px;border-radius:8px 8px 0 0;cursor:pointer;user-select:none;border:1px solid transparent;transition:all .2s;}
+.cp-section-hdr.linked{background:var(--cp-dark);border-color:var(--cp-mid);}
+.cp-section-hdr.unlinked{background:var(--surface2);border-color:var(--border);opacity:.3;}
+.cp-entry-row{display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--surface);}
+.cp-entry-row:last-child{border-bottom:none;}
+.cp-entry-row.unlinked{opacity:.2;}
+
+/* ── ACCIDENT MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:600;align-items:center;justify-content:center;padding:20px;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;max-width:680px;width:100%;max-height:90vh;animation:modalIn .2s ease;position:relative;z-index:601;}
+@keyframes modalIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+.modal-header{padding:22px 24px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;}
+.modal-title{font-size:16px;font-weight:700;}
+.modal-sub{font-size:11px;color:var(--text-dim);margin-top:3px;}
+.modal-close{background:none;border:none;color:var(--text-dim);font-size:20px;cursor:pointer;padding:0 4px;line-height:1;}
+.modal-close:hover{color:var(--text);}
+.modal-body{padding:20px 24px;}
+.acc-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;}
+.acc-card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px;}
+.acc-name{font-size:13px;font-weight:700;color:var(--text);}
+.acc-year{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--acc-mid);background:rgba(125,60,152,.2);padding:2px 7px;border-radius:4px;flex-shrink:0;}
+.acc-location{font-size:11px;color:var(--text-dim);margin-bottom:6px;}
+.acc-desc{font-size:11px;color:var(--text-dim);line-height:1.55;font-style:italic;}
+.acc-causes{margin-top:10px;display:flex;flex-wrap:wrap;gap:4px;}
+.acc-cause-tag{font-size:9px;font-family:'IBM Plex Mono',monospace;padding:2px 7px;border-radius:3px;border:1px solid;}
+.acc-cause-tag.ci{background:rgba(192,57,43,.15);border-color:var(--ci-mid);color:#FF8070;}
+.acc-cause-tag.cc{background:rgba(211,84,0,.15);border-color:var(--cc-mid);color:#FFB060;}
+.acc-cause-tag.cp{background:rgba(20,90,50,.15);border-color:var(--cp-mid);color:#60CC88;}
+
+/* ── ANALYTICS PAGE ── */
+.analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+.analytics-grid.full{grid-template-columns:1fr;}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;}
+.chart-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:4px;}
+.chart-sub{font-size:11px;color:var(--text-dimmer);font-style:italic;margin-bottom:16px;}
+.chart-wrap{position:relative;height:260px;}
+.chart-wrap.tall{height:360px;}
+
+/* ── ACCIDENTS PAGE ── */
+.acc-page-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.acc-list-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;}
+.acc-list-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:opacity .15s;}
+.acc-list-item:last-child{border-bottom:none;}
+.acc-list-item:hover{opacity:.75;}
+.acc-yr{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--acc-mid);width:36px;flex-shrink:0;padding-top:1px;}
+.acc-info{flex:1;}
+.acc-nm{font-size:12px;font-weight:600;}
+.acc-loc{font-size:11px;color:var(--text-dim);}
+
+/* ── ADD ACCIDENT FORM ── */
+.form-section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px;}
+.form-title{font-size:13px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+.form-row.full{grid-template-columns:1fr;}
+.form-label{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:5px;}
+.form-input,.form-textarea,.form-select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;color:var(--text);outline:none;transition:border-color .2s;}
+.form-input:focus,.form-textarea:focus,.form-select:focus{border-color:var(--cc-mid);}
+.form-textarea{resize:vertical;min-height:70px;}
+.form-select{cursor:pointer;}
+.tags-selector{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+.tag-option{font-size:9px;font-family:'IBM Plex Mono',monospace;padding:3px 8px;border-radius:3px;cursor:pointer;border:1px solid var(--border);color:var(--text-dimmer);transition:all .15s;background:var(--surface2);}
+.tag-option:hover{border-color:var(--text-dim);color:var(--text);}
+.tag-option.sel-ci{background:rgba(192,57,43,.2);border-color:var(--ci-mid);color:#FF8070;}
+.tag-option.sel-cc{background:rgba(211,84,0,.2);border-color:var(--cc-mid);color:#FFB060;}
+.tag-option.sel-cp{background:rgba(20,90,50,.2);border-color:var(--cp-mid);color:#60CC88;}
+.btn-add{background:var(--cp-dark);border:none;color:#fff;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;padding:9px 22px;border-radius:7px;cursor:pointer;transition:all .2s;}
+.btn-add:hover{background:var(--cp-mid);}
+
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:50px 20px;color:var(--text-dimmer);}
+.empty-icon{font-size:32px;margin-bottom:10px;}
+.empty-title{font-size:14px;font-weight:600;color:var(--text-dim);margin-bottom:5px;}
+.empty-sub{font-size:12px;font-style:italic;}
+
+/* ── FOOTER ── */
+footer{margin-top:50px;padding:18px 40px;border-top:1px solid var(--border);font-size:10px;color:var(--text-dimmer);font-family:'IBM Plex Mono',monospace;display:flex;justify-content:space-between;}
+
+/* ── SMART ACTIONS ── */
+.smart-block{background:var(--surface3);border:1px solid #2E3A50;border-radius:0 0 6px 6px;padding:12px 14px 10px;margin-bottom:2px;}
+.smart-block-title{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#5D8AA8;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.smart-block-title::before{content:'';display:inline-block;width:14px;height:1px;background:#5D8AA8;}
+.smart-action{display:flex;gap:10px;margin-bottom:8px;padding:8px 10px;border-radius:6px;border-left:3px solid;}
+.smart-action:last-child{margin-bottom:0;}
+.smart-action.court{background:rgba(192,57,43,.08);border-left-color:var(--ci-mid);}
+.smart-action.moyen{background:rgba(211,84,0,.08);border-left-color:var(--cc-mid);}
+.smart-action.long{background:rgba(20,90,50,.08);border-left-color:var(--cp-mid);}
+.action-horizon{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;flex-shrink:0;width:56px;padding:3px 5px;line-height:1.4;border-radius:4px;background:rgba(0,0,0,.25);}
+.smart-action.court .action-horizon{color:var(--ci-mid);}
+.smart-action.moyen .action-horizon{color:var(--cc-mid);}
+.smart-action.long  .action-horizon{color:var(--cp-mid);}
+.action-body{flex:1;}
+.action-text{font-size:11px;color:var(--text);line-height:1.5;margin-bottom:6px;}
+.action-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;}
+.action-owner{font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:3px;background:rgba(255,255,255,.1);color:#C8D0E0;border:1px solid rgba(255,255,255,.12);}
+.action-kpi{font-size:10px;color:#A0AABC;font-style:italic;padding:2px 6px;border-radius:3px;background:rgba(255,255,255,.05);}
+
+/* ── EDITABLE ACTIONS ── */
+.action-card{background:var(--surface2);border-radius:8px;padding:12px 14px;margin-bottom:12px;border-left:3px solid var(--cp-mid);}
+.action-cp-title{font-size:11px;font-weight:700;color:var(--cp-mid);margin-bottom:10px;}
+.action-row{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);align-items:flex-start;}
+.action-row:last-child{border-bottom:none;padding-bottom:0;}
+.action-horizon-badge{flex-shrink:0;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;padding:3px 7px;border-radius:4px;white-space:nowrap;margin-top:2px;background:rgba(0,0,0,.3);}
+.action-fields{flex:1;display:flex;flex-direction:column;gap:8px;}
+.action-field-label{font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dimmer);margin-bottom:2px;}
+.action-editable{
+  width:100%;
+  background:#1E2330;
+  border:1px solid #3A4060;
+  border-radius:5px;
+  color:#E8EAF0;
+  font-family:'IBM Plex Sans',sans-serif;
+  font-size:12px;
+  line-height:1.5;
+  padding:7px 10px;
+  outline:none;
+  transition:border-color .15s, background .15s;
+  resize:vertical;
+  box-sizing:border-box;
+  pointer-events:auto;
+  position:relative;
+  z-index:10;
+}
+.action-editable:hover{border-color:#5A6080;}
+.action-editable:focus{border-color:var(--cc-mid);background:#222840;box-shadow:0 0 0 2px rgba(230,126,34,.15);}
+.action-editable::placeholder{color:#4A5268;}
+.action-meta-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.action-saved-indicator{font-size:10px;color:var(--cp-mid);opacity:0;transition:opacity .3s;flex-shrink:0;align-self:center;}
+.action-saved-indicator.show{opacity:1;}
+
+/* ── TOOLTIPS ── */
+.has-tooltip{position:relative;}
+.has-tooltip .tooltip{
+  visibility:hidden;opacity:0;pointer-events:none;
+  position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);
+  background:#1A1E2E;border:1px solid #3A4060;color:var(--text);
+  font-size:11px;line-height:1.6;padding:8px 12px;border-radius:6px;
+  white-space:normal;width:260px;z-index:500;
+  box-shadow:0 4px 16px rgba(0,0,0,.5);
+  transition:opacity .15s ease, visibility .15s ease;
+}
+.has-tooltip:hover .tooltip{visibility:visible;opacity:1;}
+.tooltip-ci{border-left:3px solid var(--ci-mid);}
+.tooltip-cc{border-left:3px solid var(--cc-mid);}
+.tooltip-cp{border-left:3px solid var(--cp-mid);}
+.tooltip-psf{
+  left:auto;right:0;top:calc(100% + 6px);transform:none;
+  width:300px;border-left:3px solid #E6A817;
+}
+
+/* ── ANALYTICS FILTER ── */
+.analytics-filter-btn{background:none;border:none;color:var(--text-dim);font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:600;padding:9px 16px;cursor:pointer;transition:all .15s;border-right:1px solid var(--border);}
+.analytics-filter-btn:last-child{border-right:none;}
+.analytics-filter-btn:hover{color:var(--text);background:var(--surface3);}
+.analytics-filter-btn.active{color:var(--cc-mid);background:rgba(230,126,34,.12);}
+
+/* ── EXPORT BUTTONS ── */
+.export-btn{font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;cursor:pointer;border:1px solid;transition:all .15s;white-space:nowrap;}
+.export-btn-xl{background:rgba(20,90,50,.2);border-color:var(--cp-mid);color:#60CC88;}
+.export-btn-xl:hover{background:rgba(20,90,50,.4);}
+.export-btn-csv{background:rgba(52,73,170,.2);border-color:#3498DB;color:#7EC8E3;}
+.export-btn-csv:hover{background:rgba(52,73,170,.4);}
+
+/* ── MES ACCIDENTS CARDS ── */
+.my-acc-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color .2s;}
+.my-acc-card:hover{border-color:#4A5268;}
+.my-acc-card-header{padding:14px 16px 10px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+.my-acc-card-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px;}
+.my-acc-card-meta{font-size:11px;color:var(--text-dim);}
+.gravity-badge{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;flex-shrink:0;}
+.gravity-1{background:rgba(46,204,113,.2);color:#2ECC71;}
+.gravity-2{background:rgba(241,196,15,.2);color:#F1C40F;}
+.gravity-3{background:rgba(230,126,34,.2);color:#E67E22;}
+.gravity-4{background:rgba(192,57,43,.2);color:#E74C3C;}
+.gravity-5{background:rgba(192,57,43,.4);color:#FF6B6B;}
+.my-acc-card-body{padding:10px 16px 14px;}
+.my-acc-card-desc{font-size:11px;color:var(--text-dim);font-style:italic;margin-bottom:10px;line-height:1.5;}
+.my-acc-causes{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;}
+.my-acc-card-actions{display:flex;gap:8px;}
+.btn-sm{font-family:'IBM Plex Sans',sans-serif;font-size:10px;font-weight:600;padding:5px 12px;border-radius:5px;cursor:pointer;border:1px solid;transition:all .15s;}
+.btn-sm-report{background:rgba(20,90,50,.2);border-color:var(--cp-mid);color:#60CC88;}
+.btn-sm-report:hover{background:rgba(20,90,50,.4);}
+.btn-sm-compare{background:rgba(125,60,152,.2);border-color:var(--acc-mid);color:#C39BD3;}
+.btn-sm-compare:hover{background:rgba(125,60,152,.4);}
+.btn-sm-delete{background:rgba(192,57,43,.1);border-color:transparent;color:var(--text-dimmer);}
+.btn-sm-delete:hover{border-color:var(--ci-mid);color:#FF8070;}
+
+/* ── REPORT TOOLTIPS ── */
+.report-ref-tip{position:relative;cursor:help;}
+.report-tip-bubble{
+  visibility:hidden;opacity:0;
+  position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);
+  background:#1A1E2E;border:1px solid #3A4060;color:var(--text);
+  font-size:11px;font-family:'IBM Plex Sans',sans-serif;font-weight:400;
+  line-height:1.5;padding:7px 11px;border-radius:6px;
+  white-space:normal;width:240px;z-index:700;
+  box-shadow:0 4px 16px rgba(0,0,0,.5);
+  pointer-events:none;
+  transition:opacity .15s ease, visibility .15s ease;
+}
+.report-ref-tip:hover .report-tip-bubble{visibility:visible;opacity:1;}
+
+/* ── REPORT PRINT ── */
+@media print {
+  body > *:not(#report-modal) { display:none !important; }
+  #report-modal { position:static !important; background:white !important; display:block !important; }
+  #report-modal .modal { max-height:none !important; border:none !important; box-shadow:none !important; }
+  #report-modal .modal-header button { display:none !important; }
+  #report-body { color:#000 !important; }
+  .report-section { page-break-inside:avoid; }
+}
+.report-section{margin-bottom:20px;}
+.report-section-title{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:10px;}
+.report-cause-row{display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid #2A2F3F;}
+.report-cause-row:last-child{border-bottom:none;}
+.report-ref{font-family:'IBM Plex Mono',monospace;font-size:10px;width:60px;flex-shrink:0;padding-top:1px;}
+.report-text{font-size:12px;color:var(--text);}
+.compare-section{background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:10px;}
+.compare-acc-name{font-size:12px;font-weight:700;margin-bottom:6px;}
+.compare-shared{display:flex;flex-wrap:wrap;gap:4px;}
+
+/* ── PSF BADGES ── */
+.psf-row{display:flex;flex-wrap:wrap;gap:5px;padding:5px 13px 9px 66px;border-bottom:1px solid var(--border);}
+.psf-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(230,168,23,.15);border:1px solid rgba(230,168,23,.5);color:#E6C55A;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;padding:3px 8px;border-radius:4px;cursor:pointer;transition:all .15s;}
+.psf-badge:hover{background:rgba(230,168,23,.3);color:#F5D76E;}
+.psf-hex{font-size:11px;}
+
+/* ── PSF MODAL ── */
+.psf-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:600;align-items:center;justify-content:center;padding:20px;}
+.psf-modal-overlay.open{display:flex;}
+.psf-modal{background:var(--surface);border:2px solid rgba(230,168,23,.4);border-radius:12px;max-width:520px;width:100%;padding:24px;animation:modalIn .2s ease;}
+.psf-modal-num{font-size:28px;font-weight:700;color:#E6C55A;font-family:'IBM Plex Mono',monospace;margin-bottom:6px;}
+.psf-modal-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:12px;line-height:1.4;}
+.psf-modal-desc{font-size:12px;color:var(--text-dim);line-height:1.7;}
+.psf-modal-close{float:right;background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;margin-top:-4px;}
+
+/* ── PSF CHART ── */
+.psf-accidents-list{margin-top:10px;display:flex;flex-wrap:wrap;gap:5px;}
+.psf-acc-item{font-size:10px;font-family:'IBM Plex Mono',monospace;padding:2px 8px;border-radius:3px;background:rgba(125,60,152,.2);color:#C39BD3;border:1px solid rgba(125,60,152,.3);cursor:pointer;}
+.psf-acc-item:hover{background:rgba(125,60,152,.4);}
+
+/* ── TIMELINE ── */
+.timeline{position:relative;padding-left:20px;}
+.timeline::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--border);}
+.tl-item{position:relative;margin-bottom:16px;padding-left:22px;}
+.tl-item::before{content:'';position:absolute;left:-5px;top:14px;width:12px;height:12px;border-radius:50%;background:var(--acc-mid);border:2px solid var(--bg);}
+.tl-year{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--acc-mid);margin-bottom:3px;}
+.tl-name{font-size:12px;font-weight:700;cursor:pointer;transition:color .15s;}
+.tl-name:hover{color:var(--acc-mid);}
+.tl-loc{font-size:11px;color:var(--text-dim);}
+.tl-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px;}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="app-nav">
+  <div class="nav-tab active tab-icon" onclick="showPage('investigation')" id="nav-investigation">🔍 Investigation</div>
+  <div class="nav-tab" onclick="showPage('accidents')" id="nav-accidents">💥 Accidents de référence</div>
+  <div class="nav-tab" onclick="showPage('mes-accidents')" id="nav-mes-accidents">📁 Mes accidents</div>
+  <div class="nav-tab" onclick="showPage('analytics')" id="nav-analytics">📊 Statistiques</div>
+  <div style="flex:1;"></div>
+  <div id="nav-logo" style="display:flex;align-items:center;padding:0 16px;">
+    <!-- LOGO: remplacez le contenu ci-dessous par votre logo -->
+    <img id="company-logo" src="" alt="" style="height:32px;display:none;">
+    <!-- Pour ajouter votre logo: document.getElementById('company-logo').src='data:image/png;base64,...' -->
+  </div>
+</nav>
+
+<!-- HEADER (shown on investigation page) -->
+<div class="app-header" id="app-header">
+  <div class="header-row">
+    <div>
+      <div class="header-kicker">Outil d'investigation HSE · Process Safety</div>
+      <div class="header-title">Root Cause Explorer</div>
+      <div class="header-sub">Partez de ce que vous observez — remontez jusqu'à la cause profonde</div>
+    </div>
+    <button class="btn-reset" onclick="resetAll()">↺ Réinitialiser</button>
+  </div>
+  <div class="inv-bar">
+    <div class="inv-step step-ci active" id="step-ci" onclick="navToStep(1)">
+      <span class="step-dot"></span>Étape 1 — Cause Immédiate
+    </div>
+    <div class="inv-step step-cc" id="step-cc" onclick="navToStep(2)">
+      <span class="step-dot"></span>Étape 2 — Causes Contributives
+    </div>
+    <div class="inv-step step-cp" id="step-cp" onclick="navToStep(3)">
+      <span class="step-dot"></span>Étape 3 — Causes Profondes
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: INVESTIGATION ═══ -->
+<div class="page active" id="page-investigation">
+  <div class="sel-summary" id="sel-summary"></div>
+
+  <div class="panel active" id="panel-ci">
+    <div class="panel-header">
+      <span class="panel-label ci">Causes Immédiates</span>
+      <span class="panel-instruction">Sélectionnez ce que vous avez observé lors de l'incident</span>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" type="text" placeholder="Filtrer..." oninput="filterEntries('ci',this.value)">
+    </div>
+    <div id="entries-ci"></div>
+  </div>
+
+  <div class="panel" id="panel-cc">
+    <div class="panel-header">
+      <span class="panel-label cc">Causes Contributives</span>
+      <span class="panel-instruction" id="instr-cc">Sélectionnez une ou plusieurs conditions qui ont permis cette défaillance</span>
+    </div>
+    <div class="cc-toolbar">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div class="cc-count"><span id="cc-cnt">0</span> sélectionnée(s)</div>
+        <button id="btn-show-all-cc" onclick="toggleShowAllCC()" style="background:none;border:1px solid var(--border);color:var(--text-dim);font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 10px;border-radius:5px;cursor:pointer;transition:all .2s;">Afficher toutes les CC</button>
+      </div>
+      <button class="btn-confirm" id="btn-confirm" onclick="confirmCC()">Voir les causes profondes →</button>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" type="text" placeholder="Filtrer..." oninput="filterEntries('cc',this.value)">
+    </div>
+    <div id="entries-cc"></div>
+  </div>
+
+  <div class="panel" id="panel-cp">
+    <div class="panel-header">
+      <span class="panel-label cp">Causes Profondes</span>
+      <span class="panel-instruction" id="instr-cp">Défaillances systémiques liées à votre investigation</span>
+    </div>
+    <div id="save-accident-bar" style="display:none;background:var(--surface2);border:1px solid var(--cp-mid);border-radius:8px;padding:10px 16px;margin-bottom:16px;display:none;align-items:center;justify-content:space-between;gap:12px;">
+      <div style="font-size:12px;color:var(--text-dim);font-style:italic;">Investigation complète — sauvegardez-la comme accident interne</div>
+      <button onclick="openSaveAccidentModal()" style="background:var(--cp-dark);border:none;color:#fff;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;padding:8px 18px;border-radius:6px;cursor:pointer;transition:all .2s;white-space:nowrap;" onmouseover="this.style.background='var(--cp-mid)'" onmouseout="this.style.background='var(--cp-dark)'">💾 Sauvegarder comme accident</button>
+    </div>
+    <div id="entries-cp"></div>
+  </div>
+</div>
+
+<!-- SAVE ACCIDENT MODAL -->
+<div class="modal-overlay" id="save-modal" onclick="closeSaveModal(event)">
+  <div class="modal" id="save-modal-content" style="max-width:580px;" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">💾 Sauvegarder l'investigation comme accident</div>
+        <div class="modal-sub" id="save-modal-causes"></div>
+      </div>
+      <button class="modal-close" onclick="closeSaveModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <div class="form-label">Nom de l'incident *</div>
+          <input class="form-input" id="s-name" placeholder="Ex: Fuite torchère Train 2">
+        </div>
+        <div>
+          <div class="form-label">Date de l'incident *</div>
+          <input class="form-input" id="s-date" type="date" style="color-scheme:dark;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <div class="form-label">Site / Installation</div>
+          <input class="form-input" id="s-site" placeholder="Ex: Pointe-Noire, Train 1">
+        </div>
+        <div>
+          <div class="form-label">Gravité</div>
+          <select class="form-select" id="s-gravity">
+            <option value="1">1 — Mineur</option>
+            <option value="2">2 — Significatif</option>
+            <option value="3" selected>3 — Sérieux</option>
+            <option value="4">4 — Majeur</option>
+            <option value="5">5 — Catastrophique</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <div class="form-label">Description courte</div>
+        <textarea class="form-textarea" id="s-desc" placeholder="Décrivez brièvement ce qui s'est passé..."></textarea>
+      </div>
+      <div id="save-modal-psf-preview" style="margin-bottom:16px;"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button onclick="closeSaveModal()" style="background:none;border:1px solid var(--border);color:var(--text-dim);font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:8px 18px;border-radius:6px;cursor:pointer;">Annuler</button>
+        <button onclick="saveAccidentFromInvestigation()" style="background:var(--cp-dark);border:none;color:#fff;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;padding:8px 20px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--cp-mid)'" onmouseout="this.style.background='var(--cp-dark)'">✅ Sauvegarder</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REPORT MODAL -->
+<div class="modal-overlay" id="report-modal" onclick="closeReportModal(event)">
+  <div class="modal" id="report-modal-content" style="max-width:720px;" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="report-title">📋 Rapport d'investigation</div>
+        <div class="modal-sub" id="report-sub"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="printReport()" style="background:var(--cc-dark);border:none;color:#fff;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:600;padding:7px 14px;border-radius:6px;cursor:pointer;">🖨️ Imprimer / PDF</button>
+        <button class="modal-close" onclick="closeReportModal()">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" id="report-body" style="font-size:12px;line-height:1.7;max-height:75vh;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: ACCIDENTS ═══ -->
+<div class="page" id="page-accidents">
+  <div style="margin-bottom:24px;">
+    <div style="font-size:18px;font-weight:700;margin-bottom:4px;">Accidents de référence</div>
+    <div style="font-size:12px;color:var(--text-dim);font-style:italic;">Cliquez sur un accident pour voir ses causes. Ajoutez vos propres incidents en bas de page.</div>
+  </div>
+
+  <div class="acc-page-grid">
+    <div>
+      <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:12px;">Accidents connus</div>
+      <div class="acc-list-card" id="known-acc-list"></div>
+    </div>
+    <div>
+      <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:12px;">Chronologie</div>
+      <div class="acc-list-card" style="max-height:480px;overflow-y:auto;">
+        <div class="timeline" id="timeline"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD ACCIDENT FORM -->
+  <div style="margin-top:28px;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:12px;">➕ Ajouter un accident interne</div>
+  <div class="form-section">
+    <div class="form-row">
+      <div>
+        <div class="form-label">Nom de l'incident *</div>
+        <input class="form-input" id="f-name" placeholder="Ex: Fuite torchère Train 2">
+      </div>
+      <div>
+        <div class="form-label">Date de l'incident *</div>
+        <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:6px;">
+          <input class="form-input" id="f-day" type="number" placeholder="Jour" min="1" max="31" style="text-align:center;">
+          <select class="form-select" id="f-month">
+            <option value="">Mois</option>
+            <option value="1">Janvier</option><option value="2">Février</option>
+            <option value="3">Mars</option><option value="4">Avril</option>
+            <option value="5">Mai</option><option value="6">Juin</option>
+            <option value="7">Juillet</option><option value="8">Août</option>
+            <option value="9">Septembre</option><option value="10">Octobre</option>
+            <option value="11">Novembre</option><option value="12">Décembre</option>
+          </select>
+          <input class="form-input" id="f-year" type="number" placeholder="Année" min="1990" max="2100" style="text-align:center;">
+        </div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <div class="form-label">Site / Lieu</div>
+        <input class="form-input" id="f-loc" placeholder="Ex: Pointe-Noire, Congo">
+      </div>
+      <div>
+        <div class="form-label">Type</div>
+        <select class="form-select" id="f-type">
+          <option value="internal">Incident interne</option>
+          <option value="near-miss">Near-miss</option>
+          <option value="external">Accident externe (industrie)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div>
+        <div class="form-label">Description courte</div>
+        <textarea class="form-textarea" id="f-desc" placeholder="Décrivez brièvement ce qui s'est passé..."></textarea>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div>
+        <div class="form-label">Causes identifiées (cliquez pour sélectionner)</div>
+        <div class="tags-selector" id="tags-selector"></div>
+      </div>
+    </div>
+    <div style="margin-top:14px;">
+      <button class="btn-add" onclick="addAccident()">+ Ajouter l'accident</button>
+    </div>
+  </div>
+
+  <div id="custom-acc-section" style="display:none;">
+    <div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:12px;">Vos accidents</div>
+    <div class="acc-list-card" id="custom-acc-list"></div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: MES ACCIDENTS ═══ -->
+<div class="page" id="page-mes-accidents">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:16px;flex-wrap:wrap;">
+    <div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:4px;">Mes accidents internes</div>
+      <div style="font-size:12px;color:var(--text-dim);font-style:italic;">Accidents sauvegardés depuis vos investigations. Cliquez sur un accident pour voir le rapport complet.</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+      <div style="font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dimmer);margin-bottom:2px;">Exporter</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+          <div style="font-size:9px;color:var(--text-dimmer);text-transform:uppercase;letter-spacing:.06em;">Mes accidents</div>
+          <div style="display:flex;gap:6px;">
+            <button onclick="exportToExcel('internal')" class="export-btn export-btn-xl">📊 Excel</button>
+            <button onclick="exportToCSV('internal')" class="export-btn export-btn-csv">📄 CSV</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+          <div style="font-size:9px;color:var(--text-dimmer);text-transform:uppercase;letter-spacing:.06em;">Tous les accidents</div>
+          <div style="display:flex;gap:6px;">
+            <button onclick="exportToExcel('all')" class="export-btn export-btn-xl">📊 Excel</button>
+            <button onclick="exportToCSV('all')" class="export-btn export-btn-csv">📄 CSV</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mes-accidents-empty" style="text-align:center;padding:60px 20px;color:var(--text-dimmer);">
+    <div style="font-size:32px;margin-bottom:12px;">📁</div>
+    <div style="font-size:15px;font-weight:600;color:var(--text-dim);margin-bottom:8px;">Aucun accident sauvegardé</div>
+    <div style="font-size:12px;font-style:italic;">Réalisez une investigation complète (CI → CC → CP) puis cliquez<br>"Sauvegarder comme accident" à l'étape 3.</div>
+  </div>
+
+  <div id="mes-accidents-list" style="display:none;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;" id="mes-accidents-grid"></div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: ANALYTICS ═══ -->
+<div class="page" id="page-analytics">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:20px;flex-wrap:wrap;">
+    <div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:4px;">Statistiques</div>
+      <div style="font-size:12px;color:var(--text-dim);font-style:italic;" id="analytics-subtitle">Fréquence des causes et PSF non respectés</div>
+    </div>
+    <div style="display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+      <button class="analytics-filter-btn active" id="filter-all" onclick="setAnalyticsFilter('all')">Tous les accidents</button>
+      <button class="analytics-filter-btn" id="filter-internal" onclick="setAnalyticsFilter('internal')">Mes accidents uniquement</button>
+      <button class="analytics-filter-btn" id="filter-known" onclick="setAnalyticsFilter('known')">Accidents de référence</button>
+    </div>
+  </div>
+  <div id="analytics-empty" style="display:none;text-align:center;padding:60px 20px;color:var(--text-dimmer);">
+    <div style="font-size:32px;margin-bottom:12px;">📊</div>
+    <div style="font-size:14px;font-weight:600;color:var(--text-dim);margin-bottom:6px;">Aucun accident interne sauvegardé</div>
+    <div style="font-size:12px;font-style:italic;">Réalisez une investigation et sauvegardez-la comme accident<br>pour voir vos statistiques ici.</div>
+  </div>
+  <div id="analytics-content">
+  <div class="analytics-grid">
+    <div class="chart-card">
+      <div class="chart-title">Top Causes Immédiates</div>
+      <div class="chart-sub">Fréquence dans les accidents de référence</div>
+      <div class="chart-wrap"><canvas id="chart-ci"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Top Causes Contributives</div>
+      <div class="chart-sub">Fréquence dans les accidents de référence</div>
+      <div class="chart-wrap"><canvas id="chart-cc"></canvas></div>
+    </div>
+  </div>
+  <div class="analytics-grid">
+    <div class="chart-card">
+      <div class="chart-title">Top Causes Profondes</div>
+      <div class="chart-sub">Fréquence dans les accidents de référence</div>
+      <div class="chart-wrap"><canvas id="chart-cp"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Accidents par décennie</div>
+      <div class="chart-sub">Distribution temporelle de la base</div>
+      <div class="chart-wrap"><canvas id="chart-timeline"></canvas></div>
+    </div>
+  </div>
+  <div class="analytics-grid full">
+    <div class="chart-card">
+      <div class="chart-title">⬡ PSF non respectés — Fréquence</div>
+      <div class="chart-sub">Nombre d'accidents (CI + CC combinés) par PSF violé — cliquez sur une barre pour voir les accidents</div>
+      <div class="chart-wrap tall"><canvas id="chart-psf-freq"></canvas></div>
+    </div>
+  </div>
+  <div class="analytics-grid full">
+    <div class="chart-card">
+      <div class="chart-title">⬡ PSF non respectés — Tendance temporelle</div>
+      <div class="chart-sub">Évolution par décennie du nombre de violations par PSF</div>
+      <div class="chart-wrap tall"><canvas id="chart-psf-trend"></canvas></div>
+    </div>
+  </div>
+  <div class="analytics-grid full">
+    <div class="chart-card">
+      <div class="chart-title">Chronologie complète</div>
+      <div class="chart-sub">Accidents classés par année avec leurs principales causes</div>
+      <div id="full-timeline" style="padding-top:8px;"></div>
+    </div>
+  </div>
+  </div> <!-- end analytics-content -->
+</div> <!-- end page-analytics -->
+
+<!-- ACCIDENT MODAL -->
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal" id="modal-content">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-title"></div>
+        <div class="modal-sub" id="modal-sub"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<!-- PSF MODAL -->
+<div class="psf-modal-overlay" id="psf-modal" onclick="closePSFModal(event)">
+  <div class="psf-modal">
+    <button class="psf-modal-close" onclick="closePSFModal()">✕</button>
+    <div class="psf-modal-num" id="psf-modal-num"></div>
+    <div class="psf-modal-title" id="psf-modal-title"></div>
+    <div class="psf-modal-desc" id="psf-modal-desc"></div>
+    <div class="psf-accidents-list" id="psf-modal-accidents"></div>
+  </div>
+</div>
+
+<footer>
+  <span>Process Safety — Root Cause Database v4</span>
+  <span id="footer-info">—</span>
+</footer>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// CAUSE DATA
+// ════════════════════════════════════════════════════════════
+const DATA = {
+  ci:[
+    {section:'CI-1',title:'1.1 Défaillances techniques',entries:[
+      {ref:'CI-101',text:"Défaillance d'un équipement critique (vanne, PSV, HIPPS, pompe)"},
+      {ref:'CI-102',text:"Mauvais fonctionnement d'un instrument (pression, niveau, débit)"},
+      {ref:'CI-103',text:"Mauvais calibrage d'un capteur"},
+      {ref:'CI-104',text:"Perte d'alimentation (électrique, hydraulique, pneumatique)"},
+      {ref:'CI-105',text:"Corrosion ou dégradation mécanique avancée"},
+      {ref:'CI-106',text:"Fuite ou percement sur équipement ou tuyauterie"},
+      {ref:'CI-107',text:"Défaillance d'un système de contrôle (ICSS / DCS)"},
+      {ref:'CI-108',text:"Mauvaise configuration ou programmation d'un interlock ou logique de sécurité"},
+      {ref:'CI-109',text:"Temps de réponse trop long d'un système de sécurité"},
+      {ref:'CI-110',text:"Instrument isolé ou ligne d'impulsion fermée"},
+    ]},
+    {section:'CI-2',title:'1.2 Défaillances des barrières de sécurité',entries:[
+      {ref:'CI-201',text:"HIPPS non fonctionnel"},
+      {ref:'CI-202',text:"ESD/PSD non déclenché"},
+      {ref:'CI-203',text:"Alarmes non déclenchées ou mal configurées"},
+      {ref:'CI-204',text:"Bypass actif sur un système de sécurité"},
+      {ref:'CI-205',text:"Sécurités PSH non fonctionnelles"},
+      {ref:'CI-206',text:"Détecteurs gaz ou feu inhibés"},
+      {ref:'CI-207',text:"PSV isolée"},
+      {ref:'CI-208',text:"Système de dépressurisation indisponible"},
+      {ref:'CI-209',text:"Réseau anti-incendie indisponible ou obstrué"},
+    ]},
+    {section:'CI-3',title:'1.3 Actes opérationnels incorrects',entries:[
+      {ref:'CI-301',text:"Mauvais alignement de vannes"},
+      {ref:'CI-302',text:"Mauvaise configuration du procédé"},
+      {ref:'CI-303',text:"Mauvaise gestion des transitions (start-up / shutdown)"},
+      {ref:'CI-304',text:"Dépassement des limites de sécurité opérationnelle"},
+      {ref:'CI-305',text:"Isolation incorrecte d'une ligne ou d'un équipement"},
+      {ref:'CI-306',text:"Mise en service prématurée d'un équipement"},
+      {ref:'CI-307',text:"Ouverture d'une ligne sous pression"},
+      {ref:'CI-308',text:"Mauvaise purge ou inertage"},
+      {ref:'CI-309',text:"Non-respect d'une procédure opératoire"},
+      {ref:'CI-310',text:"Mauvaise interprétation d'une alarme"},
+      {ref:'CI-311',text:"Action incorrecte en salle de contrôle"},
+      {ref:'CI-312',text:"Mauvaise manipulation d'une vanne"},
+      {ref:'CI-313',text:"Oubli d'une étape critique"},
+      {ref:'CI-314',text:"Mauvaise communication ou coordination entre opérateurs"},
+      {ref:'CI-315',text:"Contrôles de sécurité non effectués"},
+    ]},
+    {section:'CI-4',title:'1.4 Défaillances de maintenance',entries:[
+      {ref:'CI-401',text:"Maintenance incorrecte ou incomplète"},
+      {ref:'CI-402',text:"Pièce remplacée non conforme"},
+      {ref:'CI-403',text:"Mauvais remontage d'équipement"},
+      {ref:'CI-404',text:"Défaut de serrage"},
+      {ref:'CI-405',text:"Mauvais réglage d'un instrument"},
+      {ref:'CI-406',text:"Maintenance retardée ou date non respectée"},
+      {ref:'CI-407',text:"Maintenances trop espacées / calendrier non adapté aux indicateurs"},
+      {ref:'CI-408',text:"Matériau de l'installation non adapté aux conditions de service"},
+    ]},
+  ],
+  cc:[
+    {section:'CC-1',title:'2.1 Lacunes de procédures et documentation',entries:[
+      {ref:'CC-101',text:"Procédure inexistante pour la tâche concernée"},
+      {ref:'CC-102',text:"Procédure inadaptée au terrain ou ambiguë"},
+      {ref:'CC-103',text:"Procédure non connue des opérateurs concernés"},
+      {ref:'CC-104',text:"Procédure non appliquée dans la pratique"},
+      {ref:'CC-105',text:"Absence de vérification de l'application des procédures"},
+      {ref:'CC-106',text:"Documentation technique non mise à jour après modification"},
+      {ref:'CC-107',text:"Gestion documentaire défaillante"},
+    ]},
+    {section:'CC-2',title:'2.2 Lacunes de formation et compétences',entries:[
+      {ref:'CC-201',text:"Formation initiale insuffisante sur le procédé ou l'équipement"},
+      {ref:'CC-202',text:"Formation non actualisée ou non efficace suite à modification ou REX"},
+      {ref:'CC-203',text:"Manque de compréhension des risques du procédé"},
+      {ref:'CC-204',text:"Compétence insuffisante sur un équipement spécifique"},
+      {ref:'CC-205',text:"Manque d'expérience ou d'accompagnement des nouvelles recrues"},
+      {ref:'CC-206',text:"Hand-over insuffisant entre équipes (passation de consignes)"},
+      {ref:'CC-207',text:"Taux de turnover élevé entraînant une perte de compétences terrain"},
+      {ref:'CC-208',text:"Manque d'engagement pour le développement des compétences"},
+    ]},
+    {section:'CC-3',title:'2.3 Lacunes dans la gestion des changements (MoC)',entries:[
+      {ref:'CC-301',text:"Modification réalisée sans évaluation des risques préalable"},
+      {ref:'CC-302',text:"Processus MoC non appliqué ou contourné"},
+      {ref:'CC-303',text:"Analyse de risques incomplète lors du changement"},
+      {ref:'CC-304',text:"Risques aux interfaces entre systèmes non identifiés"},
+      {ref:'CC-305',text:"Communication insuffisante du changement aux équipes concernées"},
+    ]},
+    {section:'CC-4',title:'2.4 Lacunes dans la gestion des barrières',entries:[
+      {ref:'CC-401',text:"Absence de suivi de l'état des SCE/SECE"},
+      {ref:'CC-402',text:"Tests périodiques des barrières non réalisés dans les délais"},
+      {ref:'CC-403',text:"Certification des équipements de sécurité non maintenue"},
+      {ref:'CC-404',text:"Bypass et inhibitions non tracés ni contrôlés"},
+      {ref:'CC-405',text:"Mauvaise gestion des inhibitions de sécurité"},
+      {ref:'CC-406',text:"Dégradation progressive des barrières non détectée"},
+    ]},
+    {section:'CC-5',title:'2.5 Lacunes de supervision et organisation locale',entries:[
+      {ref:'CC-501',text:"Supervision insuffisante lors d'opérations critiques ou non routinières"},
+      {ref:'CC-502',text:"Responsabilités mal définies entre intervenants"},
+      {ref:'CC-503',text:"Charge de travail excessive réduisant la vigilance"},
+      {ref:'CC-504',text:"Mauvaise communication entre services (opérations, maintenance, HSE)"},
+      {ref:'CC-505',text:"Personnel compétent non impliqué dans la rédaction des SOP"},
+      {ref:'CC-506',text:"Coactivité mal évaluée entre équipes ou sous-traitants"},
+      {ref:'CC-507',text:"Priorité donnée à la production au détriment de la sécurité"},
+      {ref:'CC-508',text:"Manque de leadership en sécurité des procédés"},
+    ]},
+    {section:'CC-6',title:'2.6 Comportements et culture locale',entries:[
+      {ref:'CC-601',text:"Tolérance aux écarts répétés sans correction immédiate"},
+      {ref:'CC-602',text:"Habitudes de contournement des règles de sécurité"},
+      {ref:'CC-603',text:"Normalisation de la déviation (l'écart devient la norme)"},
+      {ref:'CC-604',text:"Manque de signalement des anomalies et near-misses"},
+      {ref:'CC-605',text:"Pression opérationnelle locale favorisant la vitesse sur la sécurité"},
+      {ref:'CC-606',text:"Influence négative des pairs sur les comportements sécurité"},
+      {ref:'CC-607',text:"Personnel non impliqué dans la sécurité des procédés"},
+      {ref:'CC-608',text:"Manque de retour d'expérience au niveau local"},
+    ]},
+    {section:'CC-7',title:"2.7 Lacunes dans l'évaluation des risques locaux",entries:[
+      {ref:'CC-701',text:"HAZOP ou LOPA réalisés de façon insuffisante ou incomplète"},
+      {ref:'CC-702',text:"Scénarios accidentels mal identifiés lors des études de risques"},
+      {ref:'CC-703',text:"Mesures de mitigation définies mais non mises en œuvre"},
+      {ref:'CC-704',text:"Risques du procédé mal compris par les équipes opérationnelles"},
+      {ref:'CC-705',text:"Recommandations issues des études de risques non suivies"},
+    ]},
+  ],
+  cp:[
+    {section:'CP-1',title:"3.1 Défaillances du système de gestion de l'intégrité",entries:[
+      {ref:'CP-101',text:"Absence de programme RBI/RCM formalisé"},
+      {ref:'CP-102',text:"Politique de maintenance trop corrective"},
+      {ref:'CP-103',text:"Absence de hiérarchisation des équipements par criticité"},
+      {ref:'CP-104',text:"Ressources insuffisantes allouées à la maintenance"},
+      {ref:'CP-105',text:"Données de fiabilité non intégrées dans les décisions"},
+      {ref:'CP-106',text:"Absence de suivi systématique de la dégradation"},
+    ]},
+    {section:'CP-2',title:'3.2 Défaillances du management des compétences',entries:[
+      {ref:'CP-201',text:"Absence de référentiel de compétences pour postes critiques"},
+      {ref:'CP-202',text:"Système de qualification/habilitation non structuré"},
+      {ref:'CP-203',text:"Absence de programme de succession et transmission des savoirs"},
+      {ref:'CP-204',text:"Politique RH favorisant rotation rapide vs. expertise terrain"},
+      {ref:'CP-205',text:"Manque d'investissement stratégique dans les compétences"},
+      {ref:'CP-206',text:"Déconnexion entre formations et risques réels du procédé"},
+    ]},
+    {section:'CP-3',title:'3.3 Défaillances systémiques du MoC',entries:[
+      {ref:'CP-301',text:"Absence de processus MoC formalisé et systématique"},
+      {ref:'CP-302',text:"Culture minimisant les exigences du MoC"},
+      {ref:'CP-303',text:"Pression opérationnelle structurelle conduisant aux modifications non évaluées"},
+      {ref:'CP-304',text:"Responsabilités MoC mal définies au niveau organisationnel"},
+      {ref:'CP-305',text:"REX non intégré dans la révision du MoC"},
+    ]},
+    {section:'CP-4',title:'3.4 Défaillances systémiques de la gestion des barrières',entries:[
+      {ref:'CP-401',text:"Absence d'inventaire exhaustif des barrières (SCE/SECE)"},
+      {ref:'CP-402',text:"Performance Standards des barrières non définies"},
+      {ref:'CP-403',text:"Politique bypass/inhibitions non formalisée"},
+      {ref:'CP-404',text:"Tests de validation non intégrés dans le planning"},
+      {ref:'CP-405',text:"Dégradation des barrières normalisée au niveau systémique"},
+      {ref:'CP-406',text:"Absence de boucle de retour barrières → révision HAZOP"},
+    ]},
+    {section:'CP-5',title:'3.5 Défaillances du leadership et de la culture',entries:[
+      {ref:'CP-501',text:"Direction non engagée visiblement envers la sécurité procédé"},
+      {ref:'CP-502',text:"Arbitrages budgétaires défavorables à la sécurité"},
+      {ref:'CP-503',text:"Système de récompense valorisant production vs. conformité"},
+      {ref:'CP-504',text:"Absence de mécanismes pour remonter les signaux faibles"},
+      {ref:'CP-505',text:"Tolérance institutionnelle aux écarts sans correction systémique"},
+      {ref:'CP-506',text:"Silos organisationnels bloquant le partage des risques"},
+      {ref:'CP-507',text:"Absence de dialogue structuré direction-terrain"},
+      {ref:'CP-508',text:"Pression implicite décourageant le signalement"},
+      {ref:'CP-509',text:"Priorité production sur sécurité comme valeur organisationnelle"},
+    ]},
+    {section:'CP-6',title:"3.6 Défaillances du système d'apprentissage",entries:[
+      {ref:'CP-601',text:"Absence de processus d'analyse structurée incidents/near-misses"},
+      {ref:'CP-602',text:"Recommandations d'enquêtes non suivies"},
+      {ref:'CP-603',text:"Répétition d'incidents sans correction systémique"},
+      {ref:'CP-604',text:"Absence de leading indicators"},
+      {ref:'CP-605',text:"Analyse focalisée sur erreur humaine vs. défaillances systémiques"},
+      {ref:'CP-606',text:"Absence de veille sur accidents industrie (ARIA, CSB...)"},
+      {ref:'CP-607',text:"Manque de partage REX inter-sites"},
+      {ref:'CP-608',text:"Audits insuffisants ou sans suivi"},
+    ]},
+    {section:'CP-7',title:'3.7 Défaillances de la gestion quantitative des risques',entries:[
+      {ref:'CP-701',text:"HAZOP/LOPA sans révision périodique"},
+      {ref:'CP-702',text:"Absence de compétences internes QRA/SIL/LOPA"},
+      {ref:'CP-703',text:"Critères de tolérance au risque non définis"},
+      {ref:'CP-704',text:"Décisions de conception ignorant les études de risques"},
+      {ref:'CP-705',text:"Résultats études de risques non intégrés aux procédures"},
+      {ref:'CP-706',text:"Absence d'escalade quand risques > seuils acceptables"},
+    ]},
+    {section:'CP-8',title:'3.8 Défaillances stratégiques du SMS',entries:[
+      {ref:'CP-801',text:"SMS non adapté à la complexité des installations"},
+      {ref:'CP-802',text:"Absence d'alignement stratégie entreprise / SMS"},
+      {ref:'CP-803',text:"Ressources insuffisantes pour maintenir un SMS efficace"},
+      {ref:'CP-804',text:"Management sous-traitants non intégré au SMS"},
+      {ref:'CP-805',text:"Non-conformité IEC 61511 / ISA 84 / ISO 55001"},
+      {ref:'CP-806',text:"Absence d'évaluation périodique de l'efficacité du SMS"},
+      {ref:'CP-807',text:"Leçons apprises non intégrées dans la révision du SMS"},
+      {ref:'CP-808',text:"Indicateurs sécurité mal définis ou non utilisés"},
+    ]},
+  ]
+};
+
+// ════════════════════════════════════════════════════════════
+// ACCIDENT DATABASE
+// ════════════════════════════════════════════════════════════
+const KNOWN_ACCIDENTS = [
+  {
+    id:'texas-city', name:'Explosion de Texas City', year:2005, location:'Texas, USA', type:'known',
+    desc:"Explosion de la colonne de reflux lors d'un démarrage. 15 morts, 180 blessés. L'une des pires catastrophes industrielles américaines.",
+    ci:['CI-303','CI-304','CI-106'], cc:['CC-104','CC-201','CC-501','CC-601','CC-605'],
+    cp:['CP-501','CP-502','CP-503','CP-505','CP-509','CP-602','CP-603']
+  },
+  {
+    id:'deepwater', name:'Deepwater Horizon', year:2010, location:'Golfe du Mexique, USA', type:'known',
+    desc:"Blowout du puits Macondo. Explosion de la plateforme pétrolière. 11 morts, déversement de 4 millions de barils.",
+    ci:['CI-101','CI-202','CI-204','CI-207'], cc:['CC-302','CC-401','CC-404','CC-501','CC-603'],
+    cp:['CP-401','CP-403','CP-501','CP-502','CP-505','CP-509','CP-701']
+  },
+  {
+    id:'piper-alpha', name:'Piper Alpha', year:1988, location:'Mer du Nord, UK', type:'known',
+    desc:"Fuite de condensat suite à une pompe mal remise en service après maintenance. 167 morts. Changement majeur de la réglementation offshore.",
+    ci:['CI-305','CI-106','CI-204'], cc:['CC-101','CC-502','CC-404','CC-601'],
+    cp:['CP-403','CP-501','CP-505','CP-509','CP-606']
+  },
+  {
+    id:'bhopal', name:'Bhopal', year:1984, location:'Madhya Pradesh, Inde', type:'known',
+    desc:"Fuite de méthyl isocyanate d'une usine Union Carbide. Plus de 3 500 morts immédiats. La pire catastrophe industrielle de l'histoire.",
+    ci:['CI-106','CI-201','CI-208'], cc:['CC-401','CC-402','CC-501','CC-605'],
+    cp:['CP-104','CP-403','CP-501','CP-502','CP-509','CP-803']
+  },
+  {
+    id:'flixborough', name:'Flixborough', year:1974, location:'Lincolnshire, UK', type:'known',
+    desc:"Rupture d'une tuyauterie de contournement temporaire sur un réacteur cyclohexane. 28 morts. Accident fondateur de la réglementation CIMAH.",
+    ci:['CI-106','CI-402'], cc:['CC-301','CC-302','CC-304'],
+    cp:['CP-301','CP-303','CP-701','CP-702']
+  },
+  {
+    id:'phillips-pasadena', name:'Phillips Pasadena', year:1989, location:'Texas, USA', type:'known',
+    desc:"Explosion lors de travaux de maintenance sur un réacteur polyéthylène. 23 morts. Valves DEMCO mal positionnées.",
+    ci:['CI-301','CI-305'], cc:['CC-101','CC-104','CC-502'],
+    cp:['CP-301','CP-504','CP-505','CP-603']
+  },
+  {
+    id:'longford', name:'Longford Gas Plant', year:1998, location:'Victoria, Australie', type:'known',
+    desc:"Rupture d'un échangeur suite à choc thermique. 2 morts, privation de gaz de tout l'État du Victoria pendant deux semaines.",
+    ci:['CI-303','CI-105'], cc:['CC-201','CC-203','CC-501'],
+    cp:['CP-205','CP-501','CP-507','CP-605']
+  },
+  {
+    id:'buncefield', name:'Buncefield', year:2005, location:'Hertfordshire, UK', type:'known',
+    desc:"Débordement de réservoir d'essence suivi d'une explosion massive. Pas de victime mais 1 milliard £ de dommages.",
+    ci:['CI-102','CI-203','CI-304'], cc:['CC-401','CC-402','CC-105'],
+    cp:['CP-401','CP-402','CP-403','CP-606']
+  },
+  {
+    id:'esso-longford2', name:'Explosion Raffinerie Feyzin', year:1966, location:'Feyzin, France', type:'known',
+    desc:"Fuite de propane lors d'une purge de séparateur, BLEVE d'une sphère GPL. 18 morts. Accident fondateur de la réglementation SEVESO.",
+    ci:['CI-301','CI-106'], cc:['CC-101','CC-202','CC-501'],
+    cp:['CP-501','CP-504','CP-606']
+  },
+  {
+    id:'esso-mossmorran', name:'Esso Mossmorran', year:2019, location:'Fife, Écosse', type:'known',
+    desc:"Torchage excessif répété sur unité de fractionnement éthylène, infractions multiples à la réglementation environnementale.",
+    ci:['CI-107','CI-303'], cc:['CC-104','CC-403','CC-603'],
+    cp:['CP-606','CP-808','CP-502']
+  },
+];
+
+let customAccidents = [];
+
+// ════════════════════════════════════════════════════════════
+// SMART CORRECTIVE ACTIONS — keyed by CP entry ref
+// Each action: { horizon: 'court'|'moyen'|'long', text, owner, kpi }
+// ════════════════════════════════════════════════════════════
+const SMART_ACTIONS = {
+  // CP-1 Intégrité
+  'CP-101':[
+    {h:'court',text:"Réaliser un audit flash de l'état des équipements critiques et établir une liste priorisée selon la criticité sécurité d'ici 30 jours.",owner:"Maintenance / HSE",kpi:"Liste livrée avec scoring criticité"},
+    {h:'moyen',text:"Déployer un programme RBI (Risk Based Inspection) sur les 20% d'équipements à criticité élevée d'ici 6 mois.",owner:"Integrity Eng.",kpi:"% équipements couverts par RBI ≥ 80%"},
+    {h:'long',text:"Intégrer une approche RCM (Reliability Centered Maintenance) dans le système CMMS pour tous les équipements critiques d'ici 18 mois.",owner:"Direction Technique",kpi:"Taux de défaillances inattendues – 30%"},
+  ],
+  'CP-102':[
+    {h:'court',text:"Identifier les 10 équipements les plus critiques sans plan de maintenance préventive et définir un plan d'urgence d'ici 2 semaines.",owner:"Maintenance",kpi:"Plan validé par le responsable site"},
+    {h:'moyen',text:"Convertir au moins 60% des interventions correctives en préventives/prédictives sur les équipements critiques d'ici 12 mois.",owner:"Maintenance / Direction",kpi:"Ratio préventif/correctif ≥ 60%"},
+    {h:'long',text:"Mettre en place un programme de maintenance prédictive (vibrations, thermographie, analyse huile) sur les équipements tournants critiques.",owner:"Direction Technique",kpi:"MTBF équipements critiques +25%"},
+  ],
+  'CP-103':[
+    {h:'court',text:"Établir une matrice de criticité sécurité (conséquence × probabilité) pour tous les équipements du site d'ici 45 jours.",owner:"HSE / Integrity Eng.",kpi:"Matrice complète validée"},
+    {h:'moyen',text:"Implémenter un système de priorisation des travaux de maintenance basé sur la criticité sécurité dans le CMMS d'ici 6 mois.",owner:"Maintenance / IT",kpi:"100% des WO classifiés par criticité"},
+    {h:'long',text:"Revoir annuellement la matrice de criticité intégrant le retour d'expérience et les modifications d'installation.",owner:"Integrity Eng.",kpi:"Révision annuelle documentée"},
+  ],
+  'CP-104':[
+    {h:'court',text:"Chiffrer le gap ressources (budget, effectifs, outillage) entre les besoins réels et les ressources allouées et présenter à la Direction d'ici 30 jours.",owner:"Maintenance Manager",kpi:"Gap analysis livrée à la Direction"},
+    {h:'moyen',text:"Obtenir un budget maintenance réévalué sur la base du plan RBI/RCM et intégrer dans le budget N+1.",owner:"Direction / Finance",kpi:"Budget maintenance augmenté selon gap"},
+    {h:'long',text:"Définir un benchmark annuel des dépenses maintenance vs. industrie (% valeur remplacement actifs) et maintenir ≥ 2,5%.",owner:"Direction Générale",kpi:"Dépenses maintenance / valeur actifs ≥ 2,5%"},
+  ],
+  'CP-105':[
+    {h:'court',text:"Collecter et centraliser les données de fiabilité (historique pannes, MTBF, MTTR) des équipements critiques dans un tableau de bord d'ici 60 jours.",owner:"Maintenance / IT",kpi:"Dashboard fiabilité opérationnel"},
+    {h:'moyen',text:"Intégrer les KPIs de fiabilité dans les revues de management mensuelles d'ici 3 mois.",owner:"Direction Technique",kpi:"Fiabilité discutée en revue mensuelle"},
+    {h:'long',text:"Développer un modèle prédictif de durée de vie résiduelle (RLA) pour les équipements statiques critiques.",owner:"Integrity Eng.",kpi:"RLA disponible pour 100% équipements statiques critiques"},
+  ],
+  'CP-106':[
+    {h:'court',text:"Mettre en place un suivi mensuel de l'épaisseur de paroi et de la corrosion sur les 15 points critiques identifiés d'ici 30 jours.",owner:"Inspection / Integrity",kpi:"Rapport mensuel d'inspection produit"},
+    {h:'moyen',text:"Déployer un système de surveillance en ligne (capteurs corrosion, UT en ligne) sur les points les plus critiques d'ici 12 mois.",owner:"Integrity Eng.",kpi:"% points critiques surveillés en temps réel"},
+    {h:'long',text:"Intégrer la dégradation des équipements dans un modèle d'Asset Integrity Management (AIM) aligné ISO 55001.",owner:"Direction Technique",kpi:"Certification ISO 55001 obtenue"},
+  ],
+
+  // CP-2 Compétences
+  'CP-201':[
+    {h:'court',text:"Identifier les postes critiques (opérateurs procédé, techniciens sécurité, superviseurs) et rédiger leurs référentiels de compétences d'ici 60 jours.",owner:"RH / HSE",kpi:"Référentiels rédigés pour 100% postes critiques"},
+    {h:'moyen',text:"Réaliser une évaluation des compétences de tous les titulaires de postes critiques et identifier les gaps d'ici 6 mois.",owner:"RH / Operations",kpi:"Gap analysis compétences complète"},
+    {h:'long',text:"Intégrer le référentiel dans un système de gestion des compétences (LMS) avec requalification périodique obligatoire.",owner:"RH / Direction",kpi:"100% postes critiques gérés dans le LMS"},
+  ],
+  'CP-202':[
+    {h:'court',text:"Auditer le système d'habilitation existant et identifier les habilitations expirées ou manquantes d'ici 30 jours.",owner:"HSE / RH",kpi:"Audit livré, liste des gaps habilitations"},
+    {h:'moyen',text:"Mettre en place un registre des habilitations avec alertes automatiques 60 jours avant expiration d'ici 4 mois.",owner:"RH / IT",kpi:"Zéro habilitation expirée non détectée"},
+    {h:'long',text:"Développer un parcours de qualification structuré (théorie + pratique + compagnonnage) pour chaque poste critique.",owner:"RH / Operations",kpi:"Délai de qualification réduit de 20%"},
+  ],
+  'CP-203':[
+    {h:'court',text:"Identifier les experts clés dont le départ entraînerait une perte critique de savoir et documenter leurs savoirs tacites d'ici 45 jours.",owner:"RH / Operations Manager",kpi:"Cartographie des experts à risque livrée"},
+    {h:'moyen',text:"Mettre en place un programme de tutorat/compagnonnage obligatoire pour les 3 postes les plus critiques d'ici 6 mois.",owner:"RH / Operations",kpi:"100% postes critiques avec tuteur désigné"},
+    {h:'long',text:"Déployer un programme de succession formel avec plan de développement pour chaque poste critique (N et N-1).",owner:"Direction / RH",kpi:"Successeur identifié pour 100% postes critiques"},
+  ],
+  'CP-204':[
+    {h:'court',text:"Analyser le taux de turnover par poste critique et identifier les 3 postes à risque les plus élevés d'ici 30 jours.",owner:"RH",kpi:"Rapport turnover par poste produit"},
+    {h:'moyen',text:"Mettre en place des mesures de rétention ciblées (évolution de carrière, primes d'expertise) pour les postes critiques d'ici 6 mois.",owner:"Direction / RH",kpi:"Turnover postes critiques < 15%/an"},
+    {h:'long',text:"Revoir la politique RH pour valoriser l'expertise terrain autant que la mobilité, avec une grille de reconnaissance des experts.",owner:"Direction Générale / RH",kpi:"Score d'engagement expert mesuré annuellement"},
+  ],
+  'CP-205':[
+    {h:'court',text:"Identifier les besoins de formation non satisfaits sur les risques procédé critiques et établir un plan de formation prioritaire d'ici 30 jours.",owner:"HSE / RH",kpi:"Plan de formation prioritaire validé"},
+    {h:'moyen',text:"Allouer un budget formation dédié Process Safety d'au moins 3% de la masse salariale et planifier les formations d'ici 6 mois.",owner:"Direction / RH",kpi:"Budget formation PS alloué et consommé ≥ 80%"},
+    {h:'long',text:"Développer un cursus de formation Process Safety interne (niveaux opérateur, superviseur, manager) certifiant et renouvelable tous les 3 ans.",owner:"HSE / RH",kpi:"100% personnel certifié sur le cursus PS"},
+  ],
+  'CP-206':[
+    {h:'court',text:"Organiser une revue participative avec les opérateurs pour identifier les écarts entre les formations reçues et les risques réellement rencontrés.",owner:"HSE / Operations",kpi:"Revue réalisée, rapport d'écarts produit"},
+    {h:'moyen',text:"Réviser les supports de formation en intégrant des cas réels tirés du retour d'expérience du site d'ici 6 mois.",owner:"HSE / Formation",kpi:"100% modules formation révisés avec REX"},
+    {h:'long',text:"Mettre en place des simulations de scénarios accidentels (table-top exercises, simulateur procédé) au moins 2 fois par an.",owner:"HSE / Operations",kpi:"2 exercices/an réalisés et debriefés"},
+  ],
+
+  // CP-3 MoC
+  'CP-301':[
+    {h:'court',text:"Rédiger et diffuser une procédure MoC minimale (formulaire, critères de déclenchement, validation requise) d'ici 30 jours.",owner:"HSE / Engineering",kpi:"Procédure MoC publiée et signée par la Direction"},
+    {h:'moyen',text:"Former 100% des superviseurs et ingénieurs au processus MoC et tester leur compréhension d'ici 4 mois.",owner:"HSE",kpi:"100% personnel concerné formé et évalué"},
+    {h:'long',text:"Intégrer le MoC dans le système de management documentaire avec traçabilité complète et audit annuel d'application.",owner:"HSE / Direction",kpi:"Zéro modification réalisée sans MoC documenté"},
+  ],
+  'CP-302':[
+    {h:'court',text:"Analyser les 5 dernières modifications réalisées et vérifier si le MoC a été respecté — présenter les résultats à la Direction d'ici 2 semaines.",owner:"HSE",kpi:"Rapport d'audit MoC livré à la Direction"},
+    {h:'moyen',text:"Instaurer une validation obligatoire par le responsable HSE avant toute mise en service suite à une modification d'ici 3 mois.",owner:"HSE / Direction",kpi:"100% mises en service post-modification validées"},
+    {h:'long',text:"Intégrer la conformité MoC comme critère dans les évaluations de performance des managers opérationnels.",owner:"Direction",kpi:"Critère MoC inclus dans les KPI managers"},
+  ],
+  'CP-303':[
+    {h:'court',text:"Identifier les 3 dernières modifications réalisées sous pression opérationnelle sans MoC complet et réaliser une analyse de risques rétrospective.",owner:"HSE / Engineering",kpi:"Analyses rétrospectives réalisées et documentées"},
+    {h:'moyen',text:"Mettre en place un mécanisme de signalement anonyme pour les modifications réalisées sans MoC, avec traitement sans sanction d'ici 3 mois.",owner:"HSE / Direction",kpi:"Système de signalement opérationnel"},
+    {h:'long',text:"Revoir la charge de travail et les délais de projet pour garantir que la pression opérationnelle ne court-circuite plus le MoC.",owner:"Direction Générale",kpi:"Zéro modification urgente non documentée par an"},
+  ],
+  'CP-304':[
+    {h:'court',text:"Clarifier par écrit qui est responsable d'initier, d'évaluer et d'approuver chaque étape du MoC d'ici 2 semaines.",owner:"HSE / Direction",kpi:"Matrice RACI MoC publiée"},
+    {h:'moyen',text:"Former chaque responsable à son rôle spécifique dans le processus MoC d'ici 3 mois.",owner:"HSE",kpi:"100% responsables formés à leur rôle MoC"},
+    {h:'long',text:"Auditer annuellement l'application du MoC en vérifiant la clarté des responsabilités et corriger les dérives.",owner:"HSE",kpi:"Audit annuel MoC réalisé avec plan d'actions"},
+  ],
+  'CP-305':[
+    {h:'court',text:"Créer un registre des modifications des 2 dernières années et vérifier que le REX associé a été intégré dans les procédures.",owner:"HSE / Engineering",kpi:"Registre modifications créé et audité"},
+    {h:'moyen',text:"Systématiser l'envoi d'une alerte REX après chaque modification majeure vers les équipes opérationnelles d'ici 3 mois.",owner:"HSE",kpi:"100% modifications majeures avec REX diffusé"},
+    {h:'long',text:"Intégrer une revue annuelle des modifications passées dans le cycle de révision du HAZOP.",owner:"Engineering / HSE",kpi:"Révision HAZOP incluant modifications annuelle"},
+  ],
+
+  // CP-4 Barrières
+  'CP-401':[
+    {h:'court',text:"Réaliser l'inventaire complet des barrières de sécurité (SCE/SECE) et vérifier leur état actuel d'ici 45 jours.",owner:"HSE / Integrity",kpi:"Registre SCE/SECE complet et à jour"},
+    {h:'moyen',text:"Définir les Performance Standards (PS) pour chaque barrière critique (disponibilité, fiabilité, capacité) d'ici 6 mois.",owner:"Engineering / HSE",kpi:"PS définis pour 100% des barrières critiques"},
+    {h:'long',text:"Intégrer le suivi des SCE/SECE dans le système de management avec revue trimestrielle de leur statut.",owner:"HSE / Direction",kpi:"Zéro barrière critique sans PS ni suivi"},
+  ],
+  'CP-402':[
+    {h:'court',text:"Auditer les PS existants et identifier ceux qui ne sont pas mesurés ni suivis d'ici 30 jours.",owner:"HSE / Integrity",kpi:"Audit PS livré avec liste des écarts"},
+    {h:'moyen',text:"Mettre en place des indicateurs de suivi des PS dans le tableau de bord HSE mensuel d'ici 4 mois.",owner:"HSE",kpi:"PS trackés dans le dashboard mensuel"},
+    {h:'long',text:"Développer un système de scoring de la santé des barrières (Barrier Health Score) mis à jour en temps réel.",owner:"HSE / IT",kpi:"Barrier Health Score disponible et utilisé"},
+  ],
+  'CP-403':[
+    {h:'court',text:"Créer un registre des inhibitions et bypass actifs, avec date d'ouverture, justification et délai de clôture obligatoire d'ici 2 semaines.",owner:"Operations / HSE",kpi:"Registre bypass opérationnel dès J+14"},
+    {h:'moyen',text:"Mettre en place une procédure d'autorisation formelle (PTW spécifique) pour tout bypass ou inhibition de sécurité d'ici 3 mois.",owner:"HSE / Operations",kpi:"100% bypass documentés et autorisés"},
+    {h:'long',text:"Intégrer la gestion des inhibitions dans le système de contrôle (DCS/ICSS) avec alertes automatiques si durée dépassée.",owner:"Control Engineering",kpi:"Zéro bypass > délai sans alerte automatique"},
+  ],
+  'CP-404':[
+    {h:'court',text:"Recenser tous les tests de barrières en retard et établir un plan de rattrapage d'ici 30 jours.",owner:"Maintenance / HSE",kpi:"Plan de rattrapage validé et planifié"},
+    {h:'moyen',text:"Intégrer les tests périodiques des barrières dans le planning de maintenance préventive avec alertes escalade d'ici 4 mois.",owner:"Maintenance",kpi:"Taux de réalisation des tests ≥ 95%"},
+    {h:'long',text:"Mettre en place un tableau de bord de conformité des tests de barrières visible de la Direction avec revue mensuelle.",owner:"HSE / Direction",kpi:"Revue mensuelle des tests barrières réalisée"},
+  ],
+  'CP-405':[
+    {h:'court',text:"Sensibiliser toutes les équipes sur le concept de normalisation de la déviation avec des exemples concrets du site lors d'une session de 2h d'ici 30 jours.",owner:"HSE",kpi:"100% équipes sensibilisées"},
+    {h:'moyen',text:"Mettre en place un système de signalement des dégradations de barrières avec traitement sous 48h et remontée hebdomadaire d'ici 3 mois.",owner:"HSE / Operations",kpi:"Délai de traitement des signalements ≤ 48h"},
+    {h:'long',text:"Intégrer la tolérance zéro aux dégradations normalisées dans la politique HSE du site avec indicateur de récurrence.",owner:"Direction",kpi:"Zéro récidive de dégradation identifiée non corrigée"},
+  ],
+  'CP-406':[
+    {h:'court',text:"Analyser les 3 derniers incidents impliquant des barrières et vérifier si les HAZOP existants les auraient couverts.",owner:"HSE / Engineering",kpi:"Analyse livrée avec écarts identifiés"},
+    {h:'moyen',text:"Établir un processus de révision du HAZOP déclenché automatiquement après chaque défaillance de barrière critique d'ici 4 mois.",owner:"HSE / Engineering",kpi:"Lien défaillance → révision HAZOP formalisé"},
+    {h:'long',text:"Planifier une révision complète du HAZOP tous les 5 ans ou après tout incident majeur, avec suivi des recommandations.",owner:"Engineering / HSE",kpi:"HAZOP révisé à jour, recommandations suivies à 100%"},
+  ],
+
+  // CP-5 Leadership
+  'CP-501':[
+    {h:'court',text:"Instaurer des visites terrain hebdomadaires du management avec dialogue sécurité structuré (Safety Leadership Tours) dès la semaine prochaine.",owner:"Direction / Management",kpi:"Fréquence visites terrain ≥ 1/semaine/manager"},
+    {h:'moyen',text:"Définir des objectifs de sécurité procédé personnels pour chaque membre du management d'ici 3 mois.",owner:"Direction Générale",kpi:"100% managers avec objectifs PS personnels"},
+    {h:'long',text:"Intégrer les indicateurs de sécurité procédé dans la rémunération variable du management.",owner:"Direction Générale / RH",kpi:"Poids sécurité ≥ 20% dans bonus management"},
+  ],
+  'CP-502':[
+    {h:'court',text:"Présenter à la Direction une analyse coût-bénéfice des 5 postes de sécurité les plus sous-financés d'ici 30 jours.",owner:"HSE / Finance",kpi:"Analyse coût-bénéfice présentée et arbitrée"},
+    {h:'moyen',text:"Établir un budget sécurité procédé dédié avec protection contre les coupes budgétaires opérationnelles d'ici 6 mois.",owner:"Direction / Finance",kpi:"Budget PS sanctuarisé dans le cycle budgétaire"},
+    {h:'long',text:"Mettre en place une revue annuelle de l'adéquation ressources/risques présentée au Conseil d'Administration.",owner:"Direction Générale",kpi:"Revue annuelle ressources/risques au CA"},
+  ],
+  'CP-503':[
+    {h:'court',text:"Revoir le système de KPI et supprimer tout indicateur qui peut inciter implicitement à sacrifier la sécurité pour la production d'ici 30 jours.",owner:"Direction / RH",kpi:"Revue KPI réalisée, indicateurs conflictuels supprimés"},
+    {h:'moyen',text:"Ajouter des indicateurs de sécurité procédé positifs (near-miss déclarés, audits réalisés) dans les évaluations de performance d'ici 6 mois.",owner:"Direction / RH",kpi:"Indicateurs PS positifs dans toutes les évaluations"},
+    {h:'long',text:"Reconnaître publiquement (réunion site, newsletter) les comportements exemplaires en matière de sécurité procédé au moins une fois par mois.",owner:"Direction Site",kpi:"Reconnaissance sécurité mensuelle documentée"},
+  ],
+  'CP-504':[
+    {h:'court',text:"Mettre en place une boîte à idées/signalement anonyme physique et digitale pour les signaux faibles de sécurité d'ici 2 semaines.",owner:"HSE / Direction",kpi:"Système de signalement opérationnel"},
+    {h:'moyen',text:"Instaurer des réunions de sécurité participatives mensuelles (opérateurs + management) avec compte-rendu d'actions d'ici 3 mois.",owner:"Operations Manager / HSE",kpi:"Réunions mensuelles réalisées et actions suivies"},
+    {h:'long',text:"Développer un programme de Safety Champions terrain avec rôle officiel de remontée des signaux faibles vers le management.",owner:"HSE / Direction",kpi:"Safety Champions actifs sur chaque shift"},
+  ],
+  'CP-505':[
+    {h:'court',text:"Analyser les 10 derniers incidents et identifier combien avaient des précurseurs (near-miss, anomalies) qui n'ont pas été escaladés.",owner:"HSE",kpi:"Analyse livrée à la Direction"},
+    {h:'moyen',text:"Instaurer une revue mensuelle des écarts répétés avec plan d'action obligatoire validé par le management d'ici 3 mois.",owner:"Operations Manager / HSE",kpi:"100% écarts répétés avec plan d'action"},
+    {h:'long',text:"Mettre en place un indicateur de récurrence des déviations et l'intégrer comme KPI de performance du site.",owner:"Direction",kpi:"Taux de récurrence des déviations en baisse chaque année"},
+  ],
+  'CP-506':[
+    {h:'court',text:"Organiser une réunion inter-services mensuelle dédiée aux risques procédé partagés d'ici 30 jours.",owner:"Operations Manager",kpi:"Réunion inter-services mensuelle instituée"},
+    {h:'moyen',text:"Créer un tableau de bord des risques partagé entre Operations, Maintenance et HSE mis à jour hebdomadairement.",owner:"HSE / IT",kpi:"Dashboard risques partagé opérationnel"},
+    {h:'long',text:"Revoir l'organisation pour créer des interfaces formelles entre services sur les sujets de sécurité procédé.",owner:"Direction",kpi:"Interfaces inter-services documentées et actives"},
+  ],
+  'CP-507':[
+    {h:'court',text:"Instaurer un point sécurité procédé de 10 minutes dans chaque réunion opérationnelle quotidienne dès la semaine prochaine.",owner:"Operations Manager",kpi:"Point PS dans 100% des réunions opérationnelles"},
+    {h:'moyen',text:"Organiser trimestriellement une réunion Direction-terrain dédiée aux risques procédé avec retour d'actions sous 2 semaines.",owner:"Direction Site",kpi:"4 réunions Direction-terrain/an réalisées"},
+    {h:'long',text:"Déployer un programme de Visible Felt Leadership (VFL) avec formation de tous les managers et suivi des visites terrain.",owner:"Direction",kpi:"VFL mesuré, score amélioré chaque année"},
+  ],
+  'CP-508':[
+    {h:'court',text:"Communiquer officiellement à toutes les équipes la politique de non-sanction pour le signalement de bonne foi d'anomalies d'ici 1 semaine.",owner:"Direction Site",kpi:"Communication diffusée et signée"},
+    {h:'moyen',text:"Analyser les données de signalement (near-miss, anomalies) des 12 derniers mois et présenter les tendances à toutes les équipes.",owner:"HSE",kpi:"Analyse et communication réalisées"},
+    {h:'long',text:"Mesurer annuellement le Climate de Sécurité (Safety Climate Survey) et suivre l'évolution de l'indicateur de confiance au signalement.",owner:"HSE / Direction",kpi:"Score confiance signalement en hausse chaque année"},
+  ],
+  'CP-509':[
+    {h:'court',text:"Revoir le discours managérial et supprimer tout message implicite ou explicite qui place la production au-dessus de la sécurité d'ici 2 semaines.",owner:"Direction",kpi:"Revue communication managériale réalisée"},
+    {h:'moyen',text:"Intégrer dans la charte de valeurs du site une déclaration claire de primauté absolue de la sécurité procédé sur les objectifs de production.",owner:"Direction Générale",kpi:"Charte révisée, affichée, signée par tous les managers"},
+    {h:'long',text:"Mettre en place le droit de Stop Work Authority (SWA) formel pour tout employé et le mesurer annuellement.",owner:"Direction / HSE",kpi:"Nombre de SWA exercés mesuré et valorisé"},
+  ],
+
+  // CP-6 Apprentissage
+  'CP-601':[
+    {h:'court',text:"Mettre en place une procédure d'investigation simplifiée (5 Pourquoi + arbre des causes) applicable par les superviseurs pour tout near-miss d'ici 30 jours.",owner:"HSE",kpi:"Procédure publiée, 100% superviseurs formés"},
+    {h:'moyen',text:"Créer un comité d'investigation mensuel inter-services pour analyser les incidents significatifs d'ici 3 mois.",owner:"HSE / Direction",kpi:"Comité opérationnel, réunion mensuelle réalisée"},
+    {h:'long',text:"Adopter une méthodologie d'investigation formelle (ICAM, TapRoot ou Bow-Tie) pour tous les incidents et near-misses significatifs.",owner:"HSE / Direction",kpi:"100% incidents ≥ potentiel sérieux analysés avec la méthodologie"},
+  ],
+  'CP-602':[
+    {h:'court',text:"Faire le bilan des recommandations ouvertes depuis plus de 6 mois et forcer leur clôture ou leur escalade d'ici 30 jours.",owner:"HSE",kpi:"Zéro recommandation > 6 mois sans décision"},
+    {h:'moyen',text:"Mettre en place un registre des actions correctives avec responsable, délai et statut, revu en réunion mensuelle d'ici 3 mois.",owner:"HSE / Operations",kpi:"Taux de clôture des recommandations ≥ 90%"},
+    {h:'long',text:"Intégrer le taux de clôture des recommandations d'incidents comme KPI de performance du management.",owner:"Direction",kpi:"Taux clôture recommandations dans KPI managers"},
+  ],
+  'CP-603':[
+    {h:'court',text:"Rechercher les récurrences sur les 3 dernières années et présenter à la Direction la liste des incidents répétés sans correction systémique.",owner:"HSE",kpi:"Rapport récurrences livré à la Direction"},
+    {h:'moyen',text:"Pour chaque récurrence identifiée, réaliser une analyse de cause profonde et définir une action systémique d'ici 6 mois.",owner:"HSE / Engineering",kpi:"100% récurrences avec action systémique définie"},
+    {h:'long',text:"Mettre en place un indicateur de récurrence des incidents comme mesure de l'efficacité du système d'apprentissage.",owner:"HSE / Direction",kpi:"Taux de récurrence en baisse chaque année"},
+  ],
+  'CP-604':[
+    {h:'court',text:"Identifier et implémenter 3 leading indicators Process Safety (ex: tests barrières, near-miss déclarés, bypass actifs) d'ici 30 jours.",owner:"HSE",kpi:"3 leading indicators publiés dans dashboard mensuel"},
+    {h:'moyen',text:"Développer un tableau de bord leading/lagging indicators PS partagé avec toutes les équipes d'ici 6 mois.",owner:"HSE / IT",kpi:"Dashboard opérationnel, consulté hebdomadairement"},
+    {h:'long',text:"Viser une proportion 70% leading / 30% lagging indicators dans le système de pilotage de la sécurité procédé.",owner:"Direction / HSE",kpi:"Ratio 70/30 leading/lagging atteint"},
+  ],
+  'CP-605':[
+    {h:'court',text:"Former les équipes d'investigation à la méthode des barrières de Reason (Swiss Cheese Model) pour éviter le blame de l'opérateur d'ici 30 jours.",owner:"HSE",kpi:"100% investigateurs formés au modèle systémique"},
+    {h:'moyen',text:"Revoir les rapports d'incidents des 2 dernières années et compléter l'analyse systémique là où seule l'erreur humaine avait été retenue.",owner:"HSE",kpi:"Analyses révisées, causes systémiques documentées"},
+    {h:'long',text:"Mesurer annuellement le % d'incidents dont la cause finale identifiée est exclusivement 'erreur humaine' et viser < 20%.",owner:"HSE / Direction",kpi:"% causes 'erreur humaine unique' < 20%"},
+  ],
+  'CP-606':[
+    {h:'court',text:"S'abonner aux bases de données d'accidents industriels (ARIA-BARPI, CSB, PHMSA) et diffuser une synthèse mensuelle aux équipes dès le mois prochain.",owner:"HSE",kpi:"Newsletter REX externe mensuelle diffusée"},
+    {h:'moyen',text:"Organiser trimestriellement une revue d'accidents industriels similaires au secteur avec discussion des enseignements applicables d'ici 3 mois.",owner:"HSE / Operations",kpi:"4 revues REX externe/an réalisées"},
+    {h:'long',text:"Participer à un réseau industriel de partage d'expérience (IOGP, UIC, GESIP) pour accéder aux leçons apprises du secteur.",owner:"Direction / HSE",kpi:"Membership réseau industriel actif"},
+  ],
+  'CP-607':[
+    {h:'court',text:"Créer un format standardisé de fiche REX (1 page) et diffuser les 5 derniers incidents significatifs à toutes les équipes d'ici 2 semaines.",owner:"HSE",kpi:"5 fiches REX diffusées à 100% des équipes"},
+    {h:'moyen',text:"Mettre en place un partage REX mensuel entre sites (si multi-sites) ou avec des partenaires de l'industrie d'ici 3 mois.",owner:"HSE / Direction",kpi:"Partage REX mensuel inter-sites effectif"},
+    {h:'long',text:"Intégrer le REX dans le cycle de révision des procédures : toute procédure doit être révisée si un incident lié est survenu.",owner:"HSE / Engineering",kpi:"100% procédures révisées après incident lié"},
+  ],
+  'CP-608':[
+    {h:'court',text:"Planifier un audit interne Process Safety complet dans les 60 prochains jours avec équipe indépendante de l'opérationnel.",owner:"HSE / Direction",kpi:"Audit planifié et réalisé dans les délais"},
+    {h:'moyen',text:"Mettre en place un programme d'audits internes trimestriels Process Safety avec suivi des actions correctives d'ici 6 mois.",owner:"HSE",kpi:"4 audits PS/an réalisés, actions suivies à 90%"},
+    {h:'long',text:"Engager un audit externe Process Safety tous les 3 ans (ISM, DNV, Bureau Veritas) et présenter les résultats à la Direction.",owner:"Direction",kpi:"Audit externe PS tous les 3 ans réalisé"},
+  ],
+
+  // CP-7 Gestion des risques
+  'CP-701':[
+    {h:'court',text:"Identifier les HAZOP de plus de 5 ans ou n'ayant pas été révisés après un incident et planifier leur révision d'ici 30 jours.",owner:"HSE / Engineering",kpi:"Liste HAZOP obsolètes identifiée, révisions planifiées"},
+    {h:'moyen',text:"Réviser les HAZOP identifiés comme obsolètes en priorisant les unités les plus critiques d'ici 12 mois.",owner:"Engineering / HSE",kpi:"100% HAZOP > 5 ans révisés"},
+    {h:'long',text:"Mettre en place un programme de révision systématique des HAZOP tous les 5 ans ou après incident/modification majeure.",owner:"Engineering / HSE",kpi:"Programme révision HAZOP institutionnalisé"},
+  ],
+  'CP-702':[
+    {h:'court',text:"Identifier les ressources internes disponibles en QRA/SIL/LOPA et les lacunes à combler d'ici 30 jours.",owner:"HSE / RH",kpi:"Cartographie compétences QRA/SIL/LOPA livrée"},
+    {h:'moyen',text:"Former au moins 2 ingénieurs internes aux méthodes LOPA et SIL Assessment d'ici 9 mois.",owner:"Direction Technique / RH",kpi:"2 ingénieurs certifiés LOPA/SIL"},
+    {h:'long',text:"Développer une compétence interne en QRA pour réduire la dépendance aux consultants externes pour les études de risques critiques.",owner:"Direction Technique",kpi:"QRA réalisées en interne pour ≥ 50% des études"},
+  ],
+  'CP-703':[
+    {h:'court',text:"Définir et formaliser les critères de tolérance au risque du site (matrice de risque, niveaux ALARP) d'ici 45 jours.",owner:"HSE / Direction",kpi:"Critères de tolérance au risque publiés et signés"},
+    {h:'moyen',text:"Former l'ensemble du management et de l'ingénierie aux critères de tolérance au risque et à leur application d'ici 6 mois.",owner:"HSE",kpi:"100% managers et ingénieurs formés"},
+    {h:'long',text:"Réviser annuellement les critères de tolérance en tenant compte des évolutions réglementaires et des incidents de l'industrie.",owner:"HSE / Direction",kpi:"Révision annuelle documentée"},
+  ],
+  'CP-704':[
+    {h:'court',text:"Revoir les décisions de conception des 3 derniers projets majeurs et vérifier que les recommandations HAZOP/QRA ont été intégrées.",owner:"Engineering / HSE",kpi:"Audit décisions conception livré"},
+    {h:'moyen',text:"Exiger formellement que toute décision de conception majeure soit accompagnée d'une validation par le responsable HSE/risques d'ici 3 mois.",owner:"Direction / HSE",kpi:"Validation HSE obligatoire dans le processus projet"},
+    {h:'long',text:"Intégrer la sécurité dès la conception (Safety by Design) comme critère incontournable dans tous les nouveaux projets.",owner:"Direction Technique",kpi:"100% projets avec revue Safety by Design"},
+  ],
+  'CP-705':[
+    {h:'court',text:"Comparer les 5 procédures opératoires les plus critiques avec les recommandations des HAZOP correspondants et identifier les écarts.",owner:"HSE / Operations",kpi:"Rapport d'écarts procédures/HAZOP livré"},
+    {h:'moyen',text:"Mettre à jour toutes les procédures opératoires pour intégrer les barrières et mesures de mitigation identifiées dans les HAZOP d'ici 9 mois.",owner:"Operations / HSE",kpi:"100% procédures critiques alignées avec HAZOP"},
+    {h:'long',text:"Systématiser la révision des procédures après chaque HAZOP ou LOPA avec traçabilité de l'intégration des recommandations.",owner:"HSE / Operations",kpi:"Lien HAZOP → procédure traçable à 100%"},
+  ],
+  'CP-706':[
+    {h:'court',text:"Définir les seuils de risque déclenchant une escalade obligatoire vers le management d'ici 2 semaines.",owner:"HSE / Direction",kpi:"Seuils d'escalade définis et communiqués"},
+    {h:'moyen',text:"Former les équipes opérationnelles à reconnaître les situations dépassant les seuils de tolérance et à déclencher l'escalade d'ici 4 mois.",owner:"HSE",kpi:"100% opérateurs formés à l'escalade risque"},
+    {h:'long',text:"Intégrer l'escalade des risques dans le système de management avec traçabilité des décisions et des justifications.",owner:"Direction / HSE",kpi:"Zéro situation à risque élevé sans escalade documentée"},
+  ],
+
+  // CP-8 SMS
+  'CP-801':[
+    {h:'court',text:"Réaliser un gap analysis du SMS actuel par rapport au référentiel ISA 84 / IEC 61511 et identifier les 10 écarts les plus critiques d'ici 45 jours.",owner:"HSE / Direction",kpi:"Gap analysis SMS livrée avec priorisation"},
+    {h:'moyen',text:"Mettre en place un plan d'amélioration du SMS sur 18 mois adressant les 10 écarts critiques identifiés.",owner:"Direction / HSE",kpi:"Plan SMS approuvé et en cours d'exécution"},
+    {h:'long',text:"Faire certifier le SMS par un organisme externe (ISM, DNV) et maintenir la certification avec revue annuelle.",owner:"Direction Générale",kpi:"Certification SMS obtenue et maintenue"},
+  ],
+  'CP-802':[
+    {h:'court',text:"Présenter au Comité de Direction les exigences du SMS et identifier les décisions stratégiques incompatibles avec ces exigences d'ici 30 jours.",owner:"HSE / Direction",kpi:"Revue alignement stratégie/SMS réalisée"},
+    {h:'moyen',text:"Intégrer les exigences du SMS dans le processus de planification stratégique annuelle d'ici 6 mois.",owner:"Direction Générale",kpi:"SMS intégré dans le cycle de planification stratégique"},
+    {h:'long',text:"Mesurer annuellement l'alignement entre les objectifs stratégiques de l'entreprise et les exigences du SMS.",owner:"Direction Générale",kpi:"Rapport alignement stratégie/SMS annuel"},
+  ],
+  'CP-803':[
+    {h:'court',text:"Quantifier les ressources minimales nécessaires pour maintenir un SMS efficace (ETP, budget, outils) et identifier le gap avec les ressources actuelles.",owner:"HSE / Finance",kpi:"Gap resources SMS quantifié et présenté"},
+    {h:'moyen',text:"Obtenir un engagement de la Direction sur un plan de renforcement des ressources SMS sur 2 ans.",owner:"Direction / HSE",kpi:"Engagement Direction formalisé par écrit"},
+    {h:'long',text:"Benchmarker annuellement les ressources SMS du site par rapport aux standards de l'industrie et ajuster.",owner:"Direction",kpi:"Benchmark annuel réalisé, écarts traités"},
+  ],
+  'CP-804':[
+    {h:'court',text:"Auditer les contrats des 5 principaux sous-traitants et vérifier que les exigences Process Safety y figurent d'ici 30 jours.",owner:"HSE / Achats",kpi:"Audit contrats réalisé, écarts documentés"},
+    {h:'moyen',text:"Intégrer les exigences SMS (compétences, procédures, reporting incidents) dans tous les nouveaux contrats et appels d'offres d'ici 6 mois.",owner:"Achats / HSE",kpi:"100% nouveaux contrats avec exigences SMS"},
+    {h:'long',text:"Mettre en place un programme d'évaluation et de qualification des sous-traitants sur les critères Process Safety.",owner:"HSE / Achats",kpi:"100% sous-traitants critiques qualifiés PS"},
+  ],
+  'CP-805':[
+    {h:'court',text:"Réaliser un audit de conformité IEC 61511 / ISA 84 sur les systèmes instrumentés de sécurité (SIS) d'ici 60 jours.",owner:"Control Engineering / HSE",kpi:"Rapport de conformité SIS livré"},
+    {h:'moyen',text:"Mettre en place un plan de mise en conformité adressant les non-conformités identifiées d'ici 12 mois.",owner:"Engineering / Direction",kpi:"Plan de conformité approuvé et en cours"},
+    {h:'long',text:"Maintenir la conformité IEC 61511 / ISA 84 avec audits internes annuels et certification externe tous les 5 ans.",owner:"Direction Technique",kpi:"Conformité maintenue, certification externe obtenue"},
+  ],
+  'CP-806':[
+    {h:'court',text:"Planifier une revue complète de l'efficacité du SMS dans les 60 prochains jours (Management Review) avec la Direction.",owner:"HSE / Direction",kpi:"Management Review SMS planifiée et réalisée"},
+    {h:'moyen',text:"Institutionnaliser une revue de Direction semestrielle du SMS avec indicateurs d'efficacité définis d'ici 6 mois.",owner:"Direction",kpi:"2 Management Reviews SMS/an réalisées"},
+    {h:'long',text:"Faire évaluer l'efficacité du SMS par un auditeur externe indépendant tous les 3 ans avec rapport à la Direction Générale.",owner:"Direction Générale",kpi:"Évaluation externe SMS tous les 3 ans"},
+  ],
+  'CP-807':[
+    {h:'court',text:"Identifier les leçons apprises des 3 dernières années non encore intégrées dans le SMS et planifier leur intégration d'ici 45 jours.",owner:"HSE",kpi:"Liste leçons apprises non intégrées publiée"},
+    {h:'moyen',text:"Créer un processus formel de révision du SMS après chaque incident significatif ou audit avec traçabilité des mises à jour.",owner:"HSE / Direction",kpi:"Processus révision SMS documenté et appliqué"},
+    {h:'long',text:"Réviser l'ensemble du SMS tous les 3 ans en intégrant toutes les leçons apprises accumulées.",owner:"Direction / HSE",kpi:"Révision complète SMS tous les 3 ans"},
+  ],
+  'CP-808':[
+    {h:'court',text:"Définir 5 indicateurs SMS clés (leading + lagging) pertinents pour le site et les intégrer dans le tableau de bord mensuel de Direction d'ici 30 jours.",owner:"HSE / Direction",kpi:"5 KPIs SMS dans le dashboard Direction mensuel"},
+    {h:'moyen',text:"Former le management à l'interprétation et à l'utilisation des indicateurs SMS pour la prise de décision d'ici 4 mois.",owner:"HSE",kpi:"100% managers formés à la lecture des KPIs SMS"},
+    {h:'long',text:"Développer un tableau de bord SMS équilibré (leading/lagging, technique/organisationnel) revu trimestriellement en Comité de Direction.",owner:"Direction Générale / HSE",kpi:"Dashboard SMS équilibré en ComDir trimestriel"},
+  ],
+};
+
+// ════════════════════════════════════════════════════════════
+// ENI PROCESS SAFETY FUNDAMENTALS
+// ════════════════════════════════════════════════════════════
+const PSF = {
+  1:  { label:"PSF #1",  color:"#E6A817", short:"Vérifier l'état de la ligne avant démarrage",       full:"Line walking : vérifier la configuration des installations, la position des vannes, les PSV, les sécurités, les permis clôturés avant toute mise en service." },
+  2:  { label:"PSF #2",  color:"#E6A817", short:"Vérifier l'étanchéité des connexions avant remise en service", full:"Contrôler les assemblages (brides, joints, boulons) après toute opération de desserrage/serrage. Méthode Criss Cross, outils dynamométriques, essai d'étanchéité." },
+  3:  { label:"PSF #3",  color:"#E6A817", short:"Signaler et gérer les SECE endommagés",              full:"Tout dysfonctionnement de SECE doit être signalé. Des mesures palliatives temporaires sont mises en place immédiatement. Le shunt d'un SECE requiert une validation hiérarchique." },
+  4:  { label:"PSF #4",  color:"#E6A817", short:"Assurer un isolement sûr avant tout travail d'entretien", full:"Plan de condamnation complet (LOTO), certificat de condamnation joint au permis de travail, toutes sources d'énergie isolées avant toute intervention." },
+  5:  { label:"PSF #5",  color:"#E6A817", short:"Utiliser inhibition et bypass uniquement avec autorisation", full:"Tout shunt de système de protection requiert une évaluation des risques, un SOC (System Override Certificate), une durée limitée et une validation hiérarchique." },
+  6:  { label:"PSF #6",  color:"#E6A817", short:"Rester dans les limites de sécurité opérationnelle",  full:"Les SOL (Safe Operating Limits) ne doivent jamais être dépassées. Des actions prédéfinies doivent être mises en oeuvre en cas de dépassement des seuils d'exploitation." },
+  7:  { label:"PSF #7",  color:"#E6A817", short:"Surveiller les opérations de drainage ouvert",        full:"Toute opération de purge ou dépressurisation doit être encadrée, surveillée en permanence par un opérateur, avec EPI adaptés et conformément aux FDS." },
+  8:  { label:"PSF #8",  color:"#E6A817", short:"Contrôler chargement/déchargement de fluides dangereux", full:"Vérifier positionnement et arrimage du véhicule, connexions, capacité libre, protections contre surpression et sur-remplissage, surveillance permanente." },
+  9:  { label:"PSF #9",  color:"#E6A817", short:"Vider et mettre hors tension l'équipement avant ouverture", full:"L'équipement doit être isolé électriquement et mécaniquement, purgé, dépressurisé et certifié exempt de gaz avant toute ouverture." },
+  10: { label:"PSF #10", color:"#E6A817", short:"Signaler et gérer toute perte de confinement",        full:"Toute fuite, même minime, doit être immédiatement signalée et gérée. Les signaux faibles sont des précurseurs d'accidents graves." },
+};
+
+// CI → PSF links (which PSF was violated for each immediate cause)
+const LINKS_CI_PSF = {
+  'CI-101':[ 3],  'CI-102':[ 3, 6], 'CI-103':[ 3],  'CI-104':[ 3],
+  'CI-105':[ 3,10],'CI-106':[10],    'CI-107':[ 3],  'CI-108':[ 1, 3],
+  'CI-109':[ 3],  'CI-110':[ 5],
+  'CI-201':[ 3, 5],'CI-202':[ 3],   'CI-203':[ 3, 6],'CI-204':[ 5],
+  'CI-205':[ 3],  'CI-206':[ 3, 5], 'CI-207':[ 5],   'CI-208':[ 3],
+  'CI-209':[ 3],
+  'CI-301':[ 1],  'CI-302':[ 1, 6], 'CI-303':[ 1],   'CI-304':[ 6],
+  'CI-305':[ 4],  'CI-306':[ 1],    'CI-307':[ 9],    'CI-308':[ 7, 9],
+  'CI-309':[ 1],  'CI-310':[ 6],    'CI-311':[ 6],    'CI-312':[ 1],
+  'CI-313':[ 1],  'CI-314':[ 1],    'CI-315':[ 1, 3],
+  'CI-401':[ 2, 4],'CI-402':[ 2],   'CI-403':[ 2],    'CI-404':[ 2],
+  'CI-405':[ 2],  'CI-406':[ 3],    'CI-407':[ 3],    'CI-408':[ 3],
+};
+
+// CC → PSF links (which PSF is systematically ignored)
+const LINKS_CC_PSF = {
+  'CC-101':[ 1],  'CC-102':[ 1],  'CC-103':[ 1],  'CC-104':[ 1],
+  'CC-105':[ 1],  'CC-106':[ 1],  'CC-107':[ 1],
+  'CC-201':[ 1],  'CC-202':[ 1],  'CC-203':[ 6],  'CC-204':[ 2, 4],
+  'CC-205':[ 1],  'CC-206':[ 1],  'CC-207':[ 1],  'CC-208':[ 1],
+  'CC-301':[ 1],  'CC-302':[ 1],  'CC-303':[ 1],  'CC-304':[ 1],
+  'CC-305':[ 1],
+  'CC-401':[ 3],  'CC-402':[ 3],  'CC-403':[ 3],  'CC-404':[ 5],
+  'CC-405':[ 5],  'CC-406':[ 3],
+  'CC-501':[ 1, 6],'CC-502':[ 4], 'CC-503':[ 6],  'CC-504':[ 1],
+  'CC-505':[ 1],  'CC-506':[ 8],  'CC-507':[ 6],  'CC-508':[ 1],
+  'CC-601':[ 1, 6],'CC-602':[ 5],'CC-603':[ 5, 6],'CC-604':[10],
+  'CC-605':[ 6],  'CC-606':[ 1],  'CC-607':[ 1],  'CC-608':[10],
+  'CC-701':[ 6],  'CC-702':[ 6],  'CC-703':[ 6],  'CC-704':[ 6],
+  'CC-705':[ 6],
+};
+
+// Helper: get PSF numbers for a cause ref
+function getPSFsForCause(ref) {
+  const type = ref.startsWith('CI') ? 'CI' : 'CC';
+  return type === 'CI' ? (LINKS_CI_PSF[ref] || []) : (LINKS_CC_PSF[ref] || []);
+}
+
+// Helper: get all accidents linked to a PSF (via CI + CC)
+function getAccidentsForPSF(psfNum) {
+  const all = [...KNOWN_ACCIDENTS, ...customAccidents];
+  return all.filter(a => {
+    const ciMatch = (a.ci||[]).some(r => (LINKS_CI_PSF[r]||[]).includes(psfNum));
+    const ccMatch = (a.cc||[]).some(r => (LINKS_CC_PSF[r]||[]).includes(psfNum));
+    return ciMatch || ccMatch;
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// LINKS — Individual entry level (validated by team)
+// ════════════════════════════════════════════════════════════
+const LINKS_CI_CC = {
+  // CI-1 Défaillances techniques
+  'CI-101':['CC-401','CC-402','CC-101','CC-302','CC-501','CC-603'],
+  'CI-102':['CC-401','CC-402','CC-403','CC-105'],
+  'CI-103':['CC-401','CC-402','CC-201'],
+  'CI-104':['CC-401','CC-101','CC-502'],
+  'CI-105':['CC-401','CC-402','CC-406','CC-201','CC-501'],
+  'CI-106':['CC-401','CC-406','CC-101','CC-201','CC-202','CC-501','CC-601','CC-605'],
+  'CI-107':['CC-401','CC-303','CC-106','CC-104','CC-403','CC-603'],
+  'CI-108':['CC-303','CC-101','CC-201'],
+  'CI-109':['CC-401','CC-402','CC-502'],
+  'CI-110':['CC-404','CC-405','CC-502'],
+  // CI-2 Barrières
+  'CI-201':['CC-401','CC-402','CC-404','CC-501','CC-605'],
+  'CI-202':['CC-401','CC-402','CC-601','CC-302','CC-501','CC-603'],
+  'CI-203':['CC-401','CC-403','CC-101','CC-105'],
+  'CI-204':['CC-404','CC-405','CC-601','CC-302','CC-501','CC-603'],
+  'CI-205':['CC-401','CC-402','CC-406'],
+  'CI-206':['CC-404','CC-405','CC-601'],
+  'CI-207':['CC-404','CC-401','CC-601','CC-302','CC-501','CC-603'],
+  'CI-208':['CC-401','CC-402','CC-502','CC-501','CC-605'],
+  'CI-209':['CC-401','CC-402','CC-406'],
+  // CI-3 Actes opérationnels
+  'CI-301':['CC-101','CC-201','CC-502','CC-104','CC-202','CC-501'],
+  'CI-302':['CC-101','CC-203','CC-302'],
+  'CI-303':['CC-101','CC-203','CC-502','CC-104','CC-201','CC-501','CC-601','CC-605'],
+  'CI-304':['CC-101','CC-203','CC-507','CC-104','CC-201','CC-501','CC-601','CC-605'],
+  'CI-305':['CC-101','CC-201','CC-502','CC-104'],
+  'CI-306':['CC-302','CC-101','CC-502'],
+  'CI-307':['CC-101','CC-201','CC-502'],
+  'CI-308':['CC-101','CC-201','CC-203'],
+  'CI-309':['CC-101','CC-104','CC-601'],
+  'CI-310':['CC-203','CC-201','CC-502'],
+  'CI-311':['CC-203','CC-201','CC-501'],
+  'CI-312':['CC-101','CC-201','CC-204'],
+  'CI-313':['CC-101','CC-201','CC-503'],
+  'CI-314':['CC-206','CC-502','CC-503'],
+  'CI-315':['CC-501','CC-507','CC-601'],
+  // CI-4 Maintenance
+  'CI-401':['CC-101','CC-201','CC-502'],
+  'CI-402':['CC-101','CC-204','CC-502','CC-301','CC-302','CC-304'],
+  'CI-403':['CC-101','CC-204','CC-201'],
+  'CI-404':['CC-101','CC-204','CC-201'],
+  'CI-405':['CC-101','CC-204','CC-201'],
+  'CI-406':['CC-501','CC-507','CC-503'],
+  'CI-407':['CC-501','CC-507','CC-503'],
+  'CI-408':['CC-303','CC-304','CC-701'],
+};
+
+const LINKS_CC_CP = {
+  // CC-1 Procédures
+  'CC-101':['CP-201','CP-601','CP-808'],
+  'CC-102':['CP-201','CP-601','CP-505'],
+  'CC-103':['CP-201','CP-206','CP-504'],
+  'CC-104':['CP-505','CP-601','CP-508'],
+  'CC-105':['CP-505','CP-601','CP-608'],
+  'CC-106':['CP-305','CP-807','CP-808'],
+  'CC-107':['CP-808','CP-807','CP-601'],
+  // CC-2 Formation
+  'CC-201':['CP-201','CP-202','CP-205'],
+  'CC-202':['CP-202','CP-206','CP-305'],
+  'CC-203':['CP-206','CP-201','CP-604'],
+  'CC-204':['CP-201','CP-202','CP-205'],
+  'CC-205':['CP-203','CP-204','CP-205'],
+  'CC-206':['CP-203','CP-201','CP-604'],
+  'CC-207':['CP-204','CP-203','CP-502'],
+  'CC-208':['CP-205','CP-502','CP-501'],
+  // CC-3 MoC
+  'CC-301':['CP-301','CP-302','CP-303'],
+  'CC-302':['CP-301','CP-302','CP-505'],
+  'CC-303':['CP-301','CP-702','CP-304'],
+  'CC-304':['CP-702','CP-701','CP-304'],
+  'CC-305':['CP-304','CP-507','CP-305'],
+  // CC-4 Barrières
+  'CC-401':['CP-401','CP-402','CP-404'],
+  'CC-402':['CP-404','CP-401','CP-502'],
+  'CC-403':['CP-401','CP-402','CP-806'],
+  'CC-404':['CP-403','CP-401','CP-505'],
+  'CC-405':['CP-403','CP-405','CP-505'],
+  'CC-406':['CP-405','CP-402','CP-604'],
+  // CC-5 Supervision
+  'CC-501':['CP-501','CP-507','CP-509'],
+  'CC-502':['CP-304','CP-501','CP-808'],
+  'CC-503':['CP-502','CP-803','CP-509'],
+  'CC-504':['CP-506','CP-507','CP-808'],
+  'CC-505':['CP-504','CP-505','CP-201'],
+  'CC-506':['CP-804','CP-502','CP-808'],
+  'CC-507':['CP-509','CP-503','CP-501'],
+  'CC-508':['CP-501','CP-507','CP-509'],
+  // CC-6 Culture
+  'CC-601':['CP-505','CP-503','CP-509'],
+  'CC-602':['CP-505','CP-503','CP-601'],
+  'CC-603':['CP-405','CP-505','CP-603'],
+  'CC-604':['CP-504','CP-508','CP-601'],
+  'CC-605':['CP-509','CP-503','CP-502'],
+  'CC-606':['CP-505','CP-507','CP-601'],
+  'CC-607':['CP-504','CP-501','CP-507'],
+  'CC-608':['CP-606','CP-607','CP-601'],
+  // CC-7 Risques
+  'CC-701':['CP-701','CP-702','CP-703'],
+  'CC-702':['CP-701','CP-703','CP-704'],
+  'CC-703':['CP-705','CP-602','CP-502'],
+  'CC-704':['CP-206','CP-604','CP-701'],
+  'CC-705':['CP-602','CP-601','CP-808'],
+};
+
+// Helper: get accident refs for a cause ref
+function getAccidentsForCause(ref, type) {
+  const all = [...KNOWN_ACCIDENTS, ...customAccidents];
+  return all.filter(a => a[type] && a[type].includes(ref));
+}
+
+// ════════════════════════════════════════════════════════════
+// INVESTIGATION STATE
+// ════════════════════════════════════════════════════════════
+let selectedCI = null;
+let selectedCCs = [];
+let showAllCC = false;
+let currentLinkedCCRefs = [];
+
+// ════════════════════════════════════════════════════════════
+// PAGE NAVIGATION
+// ════════════════════════════════════════════════════════════
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+  document.getElementById('app-header').style.display = name === 'investigation' ? 'block' : 'none';
+  if (name === 'analytics') setAnalyticsFilter(analyticsFilter);
+  if (name === 'accidents') buildAccidentPage();
+  if (name === 'mes-accidents') renderMesAccidents();
+}
+
+// ════════════════════════════════════════════════════════════
+// RENDER INVESTIGATION PANELS
+// ════════════════════════════════════════════════════════════
+function renderPanel(type, filterSections) {
+  const container = document.getElementById('entries-' + type);
+  container.innerHTML = '';
+  DATA[type].forEach(group => {
+    const show = !filterSections || filterSections.includes(group.section);
+    if (!show && filterSections) return;
+
+    const groupEl = document.createElement('div');
+    groupEl.className = 'section-group';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'section-header ' + type;
+    hdr.innerHTML = `<span class="section-toggle">▶</span><span class="section-ref">${group.section}</span><span class="section-title">${group.title}</span><span class="section-count">${group.entries.length}</span>`;
+
+    const entriesEl = document.createElement('div');
+    entriesEl.className = 'entries-container';
+    hdr.onclick = () => toggleSection(hdr, entriesEl);
+
+    group.entries.forEach(entry => {
+      const isSel = (type==='ci' && selectedCI?.ref===entry.ref) ||
+                    (type==='cc' && selectedCCs.some(e=>e.ref===entry.ref));
+
+      const row = document.createElement('div');
+      row.className = 'entry-row ' + type + (isSel ? ' selected' : '');
+      row.dataset.ref = entry.ref;
+      row.dataset.text = entry.text;
+
+      // Get accidents linked to this cause
+      const accidents = getAccidentsForCause(entry.ref, type === 'ci' ? 'ci' : type === 'cc' ? 'cc' : 'cp');
+
+      row.innerHTML = `
+        <span class="entry-check">✓</span>
+        <span class="entry-ref">${entry.ref}</span>
+        <span class="entry-text">${entry.text}</span>
+        <span class="entry-arrow">→</span>
+        <span class="tooltip tooltip-${type}">${entry.text}</span>
+      `;
+      row.classList.add('has-tooltip');
+
+      if (type !== 'cp') row.onclick = () => selectEntry(type, entry, row);
+      entriesEl.appendChild(row);
+
+      // PSF badges (only for CI and CC)
+      if (type !== 'cp') {
+        const psfNums = getPSFsForCause(entry.ref);
+        if (psfNums.length > 0) {
+          const psfRow = document.createElement('div');
+          psfRow.className = 'psf-row';
+          psfNums.forEach(n => {
+            const badge = document.createElement('span');
+            badge.className = 'psf-badge has-tooltip';
+            badge.style.position = 'relative';
+            badge.innerHTML = `<span class="psf-hex">⬡</span>${PSF[n].label}<span class="tooltip tooltip-psf"><strong>${PSF[n].label}</strong><br>${PSF[n].short}<br><span style="color:var(--text-dimmer);font-size:10px;margin-top:4px;display:block;">${PSF[n].full}</span></span>`;
+            badge.onclick = (ev) => { ev.stopPropagation(); openPSFModal(n); };
+            psfRow.appendChild(badge);
+          });
+          entriesEl.appendChild(psfRow);
+        }
+      }
+
+      // Accident tags below row
+      if (accidents.length > 0) {
+        const tagRow = document.createElement('div');
+        tagRow.className = 'acc-tags';
+        accidents.forEach(a => {
+          const tag = document.createElement('span');
+          tag.className = 'acc-tag';
+          tag.textContent = a.name + ' (' + a.year + ')';
+          tag.onclick = (e) => { e.stopPropagation(); openAccidentModal(a); };
+          tagRow.appendChild(tag);
+        });
+        entriesEl.appendChild(tagRow);
+      }
+    });
+
+    if (filterSections) { hdr.classList.add('open'); entriesEl.classList.add('open'); }
+    groupEl.appendChild(hdr);
+    groupEl.appendChild(entriesEl);
+    container.appendChild(groupEl);
+  });
+}
+
+function renderCPPanel(linkedSections) {
+  const container = document.getElementById('entries-cp');
+  container.innerHTML = '';
+  if (!linkedSections || !linkedSections.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">Aucun lien défini</div></div>';
+    return;
+  }
+  DATA.cp.forEach(group => {
+    const linked = linkedSections.includes(group.section);
+    const groupEl = document.createElement('div');
+    groupEl.className = 'cp-section-grp';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'cp-section-hdr ' + (linked ? 'linked' : 'unlinked');
+    hdr.innerHTML = `<span class="section-toggle">▶</span><span class="section-ref">${group.section}</span><span class="section-title">${group.title}</span><span class="section-count">${group.entries.length}</span>`;
+
+    const entriesEl = document.createElement('div');
+    entriesEl.className = 'entries-container';
+    hdr.onclick = () => toggleSection(hdr, entriesEl);
+
+    group.entries.forEach(entry => {
+      const accidents = getAccidentsForCause(entry.ref, 'cp');
+      const actions = SMART_ACTIONS[entry.ref] || [];
+
+      // Cause row
+      const row = document.createElement('div');
+      row.className = 'entry-row cp has-tooltip' + (linked ? '' : ' unlinked');
+      row.style.borderBottom = (linked && (accidents.length > 0 || actions.length > 0)) ? 'none' : '';
+      row.innerHTML = `<span class="entry-ref">${entry.ref}</span><span class="entry-text">${entry.text}</span><span class="tooltip tooltip-cp">${entry.text}</span>`;
+      entriesEl.appendChild(row);
+
+      if (linked) {
+        // Accident tags
+        if (accidents.length > 0) {
+          const tagRow = document.createElement('div');
+          tagRow.className = 'acc-tags';
+          tagRow.style.borderBottom = actions.length > 0 ? 'none' : '';
+          accidents.forEach(a => {
+            const tag = document.createElement('span');
+            tag.className = 'acc-tag';
+            tag.textContent = a.name + ' (' + a.year + ')';
+            tag.onclick = () => openAccidentModal(a);
+            tagRow.appendChild(tag);
+          });
+          entriesEl.appendChild(tagRow);
+        }
+
+        // SMART actions block
+        if (actions.length > 0) {
+          const smartBlock = document.createElement('div');
+          smartBlock.className = 'smart-block';
+          smartBlock.style.borderBottom = '1px solid var(--border)';
+
+          let html = `<div class="smart-block-title">Actions correctives SMART suggérées</div>`;
+          const horizonLabel = {court:'Court terme\n≤ 3 mois', moyen:'Moyen terme\n≤ 12 mois', long:'Long terme\n> 12 mois'};
+          actions.forEach(a => {
+            html += `<div class="smart-action ${a.h}">
+              <div class="action-horizon">${horizonLabel[a.h]}</div>
+              <div class="action-body">
+                <div class="action-text">${a.text}</div>
+                <div class="action-meta">
+                  <span class="action-owner">👤 ${a.owner}</span>
+                  <span class="action-kpi">📏 ${a.kpi}</span>
+                </div>
+              </div>
+            </div>`;
+          });
+          smartBlock.innerHTML = html;
+          entriesEl.appendChild(smartBlock);
+        }
+      }
+    });
+
+    if (linked) { hdr.classList.add('open'); entriesEl.classList.add('open'); }
+    groupEl.appendChild(hdr);
+    groupEl.appendChild(entriesEl);
+    container.appendChild(groupEl);
+  });
+}
+
+function toggleSection(hdr, entriesEl) {
+  const open = entriesEl.classList.contains('open');
+  hdr.classList.toggle('open', !open);
+  entriesEl.classList.toggle('open', !open);
+}
+
+// Render CI or CC panel filtered to specific individual refs
+function renderPanelByRefs(type, linkedRefs) {
+  const container = document.getElementById('entries-' + type);
+  container.innerHTML = '';
+  if (!linkedRefs || !linkedRefs.length) { renderPanel(type, null); return; }
+
+  DATA[type].forEach(group => {
+    // Only show sections that contain at least one linked ref
+    const linkedEntries = group.entries.filter(e => linkedRefs.includes(e.ref));
+    if (!linkedEntries.length) return;
+
+    const groupEl = document.createElement('div');
+    groupEl.className = 'section-group';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'section-header ' + type;
+    hdr.innerHTML = `<span class="section-toggle">▶</span><span class="section-ref">${group.section}</span><span class="section-title">${group.title}</span><span class="section-count">${linkedEntries.length}</span>`;
+
+    const entriesEl = document.createElement('div');
+    entriesEl.className = 'entries-container';
+    hdr.onclick = () => toggleSection(hdr, entriesEl);
+
+    linkedEntries.forEach(entry => {
+      const isSel = selectedCCs.some(e => e.ref === entry.ref);
+      const row = document.createElement('div');
+      row.className = 'entry-row ' + type + (isSel ? ' selected' : '');
+      row.dataset.ref = entry.ref;
+      row.dataset.text = entry.text;
+      const accidents = getAccidentsForCause(entry.ref, type);
+      row.innerHTML = `
+        <span class="entry-check">✓</span>
+        <span class="entry-ref">${entry.ref}</span>
+        <span class="entry-text">${entry.text}</span>
+        <span class="entry-arrow">→</span>
+        <span class="tooltip tooltip-${type}">${entry.text}</span>
+      `;
+      row.classList.add('has-tooltip');
+      row.onclick = () => selectEntry(type, entry, row);
+      entriesEl.appendChild(row);
+
+      // PSF badges
+      const psfNums = getPSFsForCause(entry.ref);
+      if (psfNums.length > 0) {
+        const psfRow = document.createElement('div');
+        psfRow.className = 'psf-row';
+        psfNums.forEach(n => {
+          const badge = document.createElement('span');
+          badge.className = 'psf-badge has-tooltip';
+          badge.style.position = 'relative';
+          badge.innerHTML = `<span class="psf-hex">⬡</span>${PSF[n].label}<span class="tooltip tooltip-psf"><strong>${PSF[n].label}</strong><br>${PSF[n].short}<br><span style="color:var(--text-dimmer);font-size:10px;margin-top:4px;display:block;">${PSF[n].full}</span></span>`;
+          badge.onclick = (ev) => { ev.stopPropagation(); openPSFModal(n); };
+          psfRow.appendChild(badge);
+        });
+        entriesEl.appendChild(psfRow);
+      }
+
+      if (accidents.length > 0) {
+        const tagRow = document.createElement('div');
+        tagRow.className = 'acc-tags';
+        accidents.forEach(a => {
+          const tag = document.createElement('span');
+          tag.className = 'acc-tag';
+          tag.textContent = a.name + ' (' + a.year + ')';
+          tag.onclick = (ev) => { ev.stopPropagation(); openAccidentModal(a); };
+          tagRow.appendChild(tag);
+        });
+        entriesEl.appendChild(tagRow);
+      }
+    });
+
+    hdr.classList.add('open'); entriesEl.classList.add('open');
+    groupEl.appendChild(hdr);
+    groupEl.appendChild(entriesEl);
+    container.appendChild(groupEl);
+  });
+}
+
+// Render CP panel filtered to specific individual CP refs
+function renderCPPanelByRefs(linkedCPRefs, linkedSections) {
+  const container = document.getElementById('entries-cp');
+  container.innerHTML = '';
+  if (!linkedCPRefs || !linkedCPRefs.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">Aucun lien défini</div></div>';
+    return;
+  }
+
+  DATA.cp.forEach(group => {
+    const linked = linkedSections.includes(group.section);
+    const groupEl = document.createElement('div');
+    groupEl.className = 'cp-section-grp';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'cp-section-hdr ' + (linked ? 'linked' : 'unlinked');
+    hdr.innerHTML = `<span class="section-toggle">▶</span><span class="section-ref">${group.section}</span><span class="section-title">${group.title}</span><span class="section-count">${group.entries.length}</span>`;
+
+    const entriesEl = document.createElement('div');
+    entriesEl.className = 'entries-container';
+    hdr.onclick = () => toggleSection(hdr, entriesEl);
+
+    group.entries.forEach(entry => {
+      const isLinkedEntry = linkedCPRefs.includes(entry.ref);
+      const accidents = getAccidentsForCause(entry.ref, 'cp');
+      const actions = SMART_ACTIONS[entry.ref] || [];
+
+      const row = document.createElement('div');
+      row.className = 'entry-row cp has-tooltip' + (isLinkedEntry ? '' : ' unlinked');
+      row.style.borderBottom = (isLinkedEntry && (accidents.length > 0 || actions.length > 0)) ? 'none' : '';
+      row.innerHTML = `<span class="entry-ref">${entry.ref}</span><span class="entry-text">${entry.text}</span><span class="tooltip tooltip-cp">${entry.text}</span>`;
+      entriesEl.appendChild(row);
+
+      if (isLinkedEntry) {
+        if (accidents.length > 0) {
+          const tagRow = document.createElement('div');
+          tagRow.className = 'acc-tags';
+          tagRow.style.borderBottom = actions.length > 0 ? 'none' : '';
+          accidents.forEach(a => {
+            const tag = document.createElement('span');
+            tag.className = 'acc-tag';
+            tag.textContent = a.name + ' (' + a.year + ')';
+            tag.onclick = () => openAccidentModal(a);
+            tagRow.appendChild(tag);
+          });
+          entriesEl.appendChild(tagRow);
+        }
+        if (actions.length > 0) {
+          const smartBlock = document.createElement('div');
+          smartBlock.className = 'smart-block';
+          smartBlock.style.borderBottom = '1px solid var(--border)';
+          let html = `<div class="smart-block-title">Actions correctives SMART suggérées</div>`;
+          const horizonLabel = {court:'Court terme\n≤ 3 mois', moyen:'Moyen terme\n≤ 12 mois', long:'Long terme\n> 12 mois'};
+          actions.forEach(a => {
+            html += `<div class="smart-action ${a.h}">
+              <div class="action-horizon">${horizonLabel[a.h]}</div>
+              <div class="action-body">
+                <div class="action-text">${a.text}</div>
+                <div class="action-meta">
+                  <span class="action-owner">👤 ${a.owner}</span>
+                  <span class="action-kpi">📏 ${a.kpi}</span>
+                </div>
+              </div>
+            </div>`;
+          });
+          smartBlock.innerHTML = html;
+          entriesEl.appendChild(smartBlock);
+        }
+      }
+    });
+
+    if (linked) { hdr.classList.add('open'); entriesEl.classList.add('open'); }
+    groupEl.appendChild(hdr);
+    groupEl.appendChild(entriesEl);
+    container.appendChild(groupEl);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// SELECTION LOGIC
+// ════════════════════════════════════════════════════════════
+function selectEntry(type, entry, rowEl) {
+  if (type === 'ci') {
+    selectedCI = entry; selectedCCs = []; showAllCC = false;
+    document.querySelectorAll('.entry-row.ci').forEach(r => r.classList.remove('selected'));
+    rowEl.classList.add('selected');
+    currentLinkedCCRefs = LINKS_CI_CC[entry.ref] || [];
+    setStep(2);
+    renderPanelByRefs('cc', currentLinkedCCRefs);
+    document.getElementById('instr-cc').textContent = `Liées à "${entry.ref}" — sélectionnez une ou plusieurs causes contributives`;
+    const btn = document.getElementById('btn-show-all-cc');
+    if (btn) { btn.textContent = 'Afficher toutes les CC'; btn.style.color = 'var(--text-dim)'; btn.style.borderColor = 'var(--border)'; }
+    updateSummary(); updateFooter();
+    window.scrollTo({top:0,behavior:'smooth'});
+
+  } else if (type === 'cc') {
+    const idx = selectedCCs.findIndex(e => e.ref === entry.ref);
+    if (idx >= 0) { selectedCCs.splice(idx,1); rowEl.classList.remove('selected'); }
+    else { selectedCCs.push(entry); rowEl.classList.add('selected'); }
+    const cnt = selectedCCs.length;
+    document.getElementById('cc-cnt').textContent = cnt;
+    document.getElementById('btn-confirm').classList.toggle('ready', cnt > 0);
+    updateSummary(); updateFooter();
+  }
+}
+
+function toggleShowAllCC() {
+  showAllCC = !showAllCC;
+  const btn = document.getElementById('btn-show-all-cc');
+  if (showAllCC) {
+    renderPanel('cc', null);
+    setTimeout(() => {
+      document.querySelectorAll('.entry-row.cc').forEach(r => {
+        if (selectedCCs.some(e => e.ref === r.dataset.ref)) r.classList.add('selected');
+      });
+      document.getElementById('cc-cnt').textContent = selectedCCs.length;
+      document.getElementById('btn-confirm').classList.toggle('ready', selectedCCs.length > 0);
+    }, 50);
+    if (btn) { btn.textContent = '← Suggestions uniquement'; btn.style.color = 'var(--cc-mid)'; btn.style.borderColor = 'var(--cc-mid)'; }
+    document.getElementById('instr-cc').textContent = 'Toutes les causes contributives — sélectionnez librement';
+  } else {
+    renderPanelByRefs('cc', currentLinkedCCRefs);
+    setTimeout(() => {
+      document.querySelectorAll('.entry-row.cc').forEach(r => {
+        if (selectedCCs.some(e => e.ref === r.dataset.ref)) r.classList.add('selected');
+      });
+      document.getElementById('cc-cnt').textContent = selectedCCs.length;
+      document.getElementById('btn-confirm').classList.toggle('ready', selectedCCs.length > 0);
+    }, 50);
+    if (btn) { btn.textContent = 'Afficher toutes les CC'; btn.style.color = 'var(--text-dim)'; btn.style.borderColor = 'var(--border)'; }
+    document.getElementById('instr-cc').textContent = `Liées à "${selectedCI?.ref}" — sélectionnez une ou plusieurs causes contributives`;
+  }
+}
+
+function confirmCC() {
+  if (!selectedCCs.length) return;
+  // Get individual CP refs from each selected CC, then find their sections
+  const linkedCPRefs = [...new Set(selectedCCs.flatMap(e => LINKS_CC_CP[e.ref] || []))];
+  // Derive sections from refs (e.g. CP-401 → CP-4)
+  const cpSections = [...new Set(linkedCPRefs.map(r => r.replace(/^(CP-\d+).*$/, (m, p) => {
+    const parts = p.split('-'); return parts[0] + '-' + parts[1].charAt(0);
+  })))];
+  setStep(3);
+  renderCPPanelByRefs(linkedCPRefs, cpSections);
+  document.getElementById('instr-cp').textContent =
+    `Causes profondes liées à ${selectedCCs.map(e=>e.ref).join(', ')}`;
+  // Show save bar
+  const bar = document.getElementById('save-accident-bar');
+  if (bar) bar.style.display = 'flex';
+  updateSummary(); updateFooter();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function setStep(step) {
+  ['ci','cc','cp'].forEach((s,i) => {
+    const el = document.getElementById('step-'+s);
+    el.classList.remove('active','done');
+    if (i+1===step) el.classList.add('active');
+    else if (i+1<step) el.classList.add('done');
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-'+['ci','cc','cp'][step-1]).classList.add('active');
+}
+
+function navToStep(step) {
+  if (step === 1) goBack(1);
+  else if (step === 2 && selectedCI) goBack(2);
+}
+
+function goBack(step) {
+  if (step === 1) {
+    selectedCCs = []; setStep(1);
+    renderPanel('ci', null);
+    if (selectedCI) setTimeout(() => {
+      document.querySelectorAll('.entry-row.ci').forEach(r => {
+        if (r.dataset.ref === selectedCI.ref) r.classList.add('selected');
+      });
+    }, 50);
+  } else if (step === 2 && selectedCI) {
+    showAllCC = false;
+    const btn = document.getElementById('btn-show-all-cc');
+    if (btn) { btn.textContent = 'Afficher toutes les CC'; btn.style.color = 'var(--text-dim)'; btn.style.borderColor = 'var(--border)'; }
+    setStep(2); renderPanelByRefs('cc', currentLinkedCCRefs);
+    setTimeout(() => {
+      document.querySelectorAll('.entry-row.cc').forEach(r => {
+        if (selectedCCs.some(e => e.ref === r.dataset.ref)) r.classList.add('selected');
+      });
+      document.getElementById('cc-cnt').textContent = selectedCCs.length;
+      document.getElementById('btn-confirm').classList.toggle('ready', selectedCCs.length > 0);
+    }, 50);
+  }
+  updateSummary(); updateFooter();
+}
+
+function resetAll() {
+  selectedCI = null; selectedCCs = [];
+  setStep(1); renderPanel('ci', null);
+  const bar = document.getElementById('save-accident-bar');
+  if (bar) bar.style.display = 'none';
+  updateSummary(); updateFooter();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function updateSummary() {
+  const s = document.getElementById('sel-summary');
+  s.innerHTML = '';
+  if (!selectedCI) { s.classList.remove('visible'); return; }
+  s.classList.add('visible');
+  const c1 = document.createElement('div');
+  c1.className = 'sel-chip ci';
+  c1.innerHTML = `<span class="chip-ref">${selectedCI.ref}</span>${selectedCI.text}`;
+  c1.onclick = () => goBack(1); c1.title = 'Modifier';
+  s.appendChild(c1);
+  selectedCCs.forEach(cc => {
+    const sep = document.createElement('span'); sep.className = 'arrow-sep'; sep.textContent = '→';
+    s.appendChild(sep);
+    const c2 = document.createElement('div');
+    c2.className = 'sel-chip cc';
+    c2.innerHTML = `<span class="chip-ref">${cc.ref}</span>${cc.text}`;
+    c2.onclick = () => goBack(2); c2.title = 'Modifier';
+    s.appendChild(c2);
+  });
+}
+
+function updateFooter() {
+  const el = document.getElementById('footer-info');
+  if (!selectedCI) el.textContent = '—';
+  else if (!selectedCCs.length) el.textContent = 'CI: ' + selectedCI.ref;
+  else el.textContent = 'CI: ' + selectedCI.ref + '  →  CC: ' + selectedCCs.map(e=>e.ref).join(', ');
+}
+
+function filterEntries(type, q) {
+  q = q.toLowerCase().trim();
+  document.querySelectorAll('#entries-'+type+' .entry-row').forEach(r => {
+    const match = !q || (r.dataset.text||'').toLowerCase().includes(q) || (r.dataset.ref||'').toLowerCase().includes(q);
+    r.classList.toggle('hidden', !match);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// ACCIDENT MODAL
+// ════════════════════════════════════════════════════════════
+function openAccidentModal(acc) {
+  document.getElementById('modal-title').textContent = acc.name;
+  document.getElementById('modal-sub').textContent = acc.location + ' · ' + acc.year;
+
+  let html = `<div class="acc-desc" style="margin-bottom:16px;">${acc.desc}</div>`;
+  html += `<div style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;">Causes identifiées</div>`;
+
+  ['ci','cc','cp'].forEach(type => {
+    if (acc[type] && acc[type].length) {
+      const label = type==='ci'?'Immédiates':type==='cc'?'Contributives':'Profondes';
+      html += `<div style="font-size:11px;font-weight:600;color:var(--text-dim);margin:10px 0 6px;">${label}</div><div style="display:flex;flex-wrap:wrap;gap:5px;">`;
+      acc[type].forEach(ref => {
+        // Find text
+        let text = ref;
+        DATA[type]?.forEach(g => g.entries.forEach(e => { if (e.ref===ref) text = e.text; }));
+        html += `<div class="acc-cause-tag ${type}" title="${text}"><strong>${ref}</strong> — ${text}</div>`;
+      });
+      html += '</div>';
+    }
+  });
+
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('modal')) {
+    document.getElementById('modal').classList.remove('open');
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// ACCIDENT PAGE
+// ════════════════════════════════════════════════════════════
+function buildAccidentPage() {
+  // Known accidents list
+  const knownList = document.getElementById('known-acc-list');
+  knownList.innerHTML = '';
+  const sorted = [...KNOWN_ACCIDENTS].sort((a,b) => a.year - b.year);
+  sorted.forEach(acc => {
+    const item = document.createElement('div');
+    item.className = 'acc-list-item';
+    item.innerHTML = `<span class="acc-yr">${acc.year}</span><div class="acc-info"><div class="acc-nm">${acc.name}</div><div class="acc-loc">${acc.location}</div></div>`;
+    item.onclick = () => openAccidentModal(acc);
+    knownList.appendChild(item);
+  });
+
+  // Timeline
+  buildTimeline();
+
+  // Tags selector for form
+  buildTagsSelector();
+
+  // Custom accidents
+  renderCustomAccidents();
+}
+
+function buildTimeline() {
+  const tl = document.getElementById('timeline');
+  tl.innerHTML = '';
+  const all = [...KNOWN_ACCIDENTS, ...customAccidents].sort((a,b) => a.year - b.year);
+  all.forEach(acc => {
+    const item = document.createElement('div');
+    item.className = 'tl-item';
+    let tagsHtml = '<div class="tl-tags">';
+    [...(acc.ci||[]).slice(0,2), ...(acc.cc||[]).slice(0,2), ...(acc.cp||[]).slice(0,1)].forEach(ref => {
+      const type = ref.startsWith('CI')?'ci':ref.startsWith('CC')?'cc':'cp';
+      tagsHtml += `<span class="acc-cause-tag ${type}">${ref}</span>`;
+    });
+    tagsHtml += '</div>';
+    item.innerHTML = `<div class="tl-year">${acc.year}</div><div class="tl-name" onclick="openAccidentModal(${JSON.stringify(acc).replace(/"/g,'&quot;')})">${acc.name}</div><div class="tl-loc">${acc.location}</div>${tagsHtml}`;
+    tl.appendChild(item);
+  });
+}
+
+function buildTagsSelector() {
+  const sel = document.getElementById('tags-selector');
+  sel.innerHTML = '';
+  // Sample of CI, CC, CP refs
+  const refs = [
+    ...DATA.ci.flatMap(g => g.entries.map(e => ({ref:e.ref,type:'ci',text:e.text}))).slice(0,12),
+    ...DATA.cc.flatMap(g => g.entries.map(e => ({ref:e.ref,type:'cc',text:e.text}))).slice(0,12),
+    ...DATA.cp.flatMap(g => g.entries.map(e => ({ref:e.ref,type:'cp',text:e.text}))).slice(0,10),
+  ];
+  refs.forEach(({ref, type, text}) => {
+    const tag = document.createElement('span');
+    tag.className = 'tag-option';
+    tag.dataset.ref = ref;
+    tag.dataset.type = type;
+    tag.title = text;
+    tag.textContent = ref;
+    tag.onclick = () => tag.classList.toggle('sel-'+type);
+    sel.appendChild(tag);
+  });
+}
+
+function addAccident() {
+  const name = document.getElementById('f-name').value.trim();
+  const day   = parseInt(document.getElementById('f-day').value);
+  const month = parseInt(document.getElementById('f-month').value);
+  const year  = parseInt(document.getElementById('f-year').value);
+  const loc   = document.getElementById('f-loc').value.trim();
+  const desc  = document.getElementById('f-desc').value.trim();
+  const type  = document.getElementById('f-type').value;
+
+  if (!name || !day || !month || !year) {
+    alert('Le nom et la date complète (jour, mois, année) sont requis.');
+    return;
+  }
+
+  const monthNames = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  const dateFormatted = `${String(day).padStart(2,'0')} ${monthNames[month-1]} ${year}`;
+  const exactDate = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+
+  const selectedTags = document.querySelectorAll('.tag-option[class*="sel-"]');
+  const ci=[], cc=[], cp=[];
+  selectedTags.forEach(t => {
+    if (t.classList.contains('sel-ci')) ci.push(t.dataset.ref);
+    else if (t.classList.contains('sel-cc')) cc.push(t.dataset.ref);
+    else if (t.classList.contains('sel-cp')) cp.push(t.dataset.ref);
+  });
+
+  customAccidents.push({
+    id: 'custom-'+Date.now(), name, year, exactDate, dateFormatted,
+    location: loc||'Non précisé', desc: desc||'—', type, ci, cc, cp
+  });
+
+  document.getElementById('f-name').value='';
+  document.getElementById('f-day').value='';
+  document.getElementById('f-month').value='';
+  document.getElementById('f-year').value='';
+  document.getElementById('f-loc').value='';
+  document.getElementById('f-desc').value='';
+  document.querySelectorAll('.tag-option').forEach(t => t.className='tag-option');
+
+  buildAccidentPage();
+  renderCustomAccidents();
+}
+
+function renderCustomAccidents() {
+  const sec = document.getElementById('custom-acc-section');
+  const list = document.getElementById('custom-acc-list');
+  if (!customAccidents.length) { sec.style.display='none'; return; }
+  sec.style.display='block';
+  list.innerHTML = '';
+  customAccidents.forEach(acc => {
+    const item = document.createElement('div');
+    item.className = 'acc-list-item';
+    item.innerHTML = `<span class="acc-yr">${acc.dateFormatted || acc.year}</span><div class="acc-info"><div class="acc-nm">${acc.name} <span style="font-size:9px;color:var(--acc-mid);margin-left:4px;">INTERNE</span></div><div class="acc-loc">${acc.location}</div></div>`;
+    item.onclick = () => openAccidentModal(acc);
+    list.appendChild(item);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// SAVE ACCIDENT FROM INVESTIGATION
+// ════════════════════════════════════════════════════════════
+function openSaveAccidentModal() {
+  // Show causes summary
+  const ciText = selectedCI ? `${selectedCI.ref} — ${selectedCI.text}` : '—';
+  const ccText = selectedCCs.map(e => e.ref).join(', ') || '—';
+  document.getElementById('save-modal-causes').textContent =
+    `CI: ${selectedCI?.ref}  •  CC: ${ccText}`;
+
+  // PSF preview
+  const psfViolated = new Set();
+  if (selectedCI) (LINKS_CI_PSF[selectedCI.ref]||[]).forEach(n => psfViolated.add(n));
+  selectedCCs.forEach(cc => (LINKS_CC_PSF[cc.ref]||[]).forEach(n => psfViolated.add(n)));
+  const psfDiv = document.getElementById('save-modal-psf-preview');
+  if (psfViolated.size > 0) {
+    psfDiv.innerHTML = '<div class="form-label" style="margin-bottom:6px;">PSF non respectés (détectés automatiquement)</div><div style="display:flex;flex-wrap:wrap;gap:5px;">' +
+      [...psfViolated].map(n => `<span class="psf-badge">⬡ ${PSF[n].label}</span>`).join('') + '</div>';
+  } else {
+    psfDiv.innerHTML = '';
+  }
+
+  // Pre-fill date with today using local time (not UTC)
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  document.getElementById('s-date').value = `${yyyy}-${mm}-${dd}`;
+  document.getElementById('save-modal').classList.add('open');
+}
+
+function closeSaveModal(e) {
+  if (!e || e.target === document.getElementById('save-modal'))
+    document.getElementById('save-modal').classList.remove('open');
+}
+
+function saveAccidentFromInvestigation() {
+  const name = document.getElementById('s-name').value.trim();
+  const dateVal = document.getElementById('s-date').value; // format: YYYY-MM-DD
+
+  if (!name || !dateVal) {
+    alert('Le nom et la date sont requis.');
+    return;
+  }
+
+  const parts = dateVal.split('-');
+  const year = parseInt(parts[0]);
+  const monthNum = parseInt(parts[1]);
+  const dayNum = parseInt(parts[2]);
+  const monthNames = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  const dateFormatted = `${String(dayNum).padStart(2,'0')} ${monthNames[monthNum-1]} ${year}`;
+
+  const site = document.getElementById('s-site').value.trim();
+  const gravity = parseInt(document.getElementById('s-gravity').value);
+  const desc = document.getElementById('s-desc').value.trim();
+
+  // Collect CP refs from individual CC links (LINKS_CC_CP is keyed by individual ref)
+  const linkedCPRefs = [...new Set(selectedCCs.flatMap(e => LINKS_CC_CP[e.ref] || []))];
+  // Derive CP sections from individual refs (e.g. CP-401 → CP-4)
+  const cpSections = [...new Set(linkedCPRefs.map(r => {
+    const parts = r.split('-'); return parts[0] + '-' + parts[1].charAt(0);
+  }))];
+  const cpRefs = linkedCPRefs;
+
+  // PSF violated
+  const psfViolated = new Set();
+  if (selectedCI) (LINKS_CI_PSF[selectedCI.ref]||[]).forEach(n => psfViolated.add(n));
+  selectedCCs.forEach(cc => (LINKS_CC_PSF[cc.ref]||[]).forEach(n => psfViolated.add(n)));
+
+  const acc = {
+    id: 'internal-' + Date.now(),
+    name, year,
+    exactDate: dateVal,
+    dateFormatted,
+    location: site || 'Non précisé',
+    gravity,
+    desc: desc || '—',
+    type: 'internal',
+    investigationDate: dateFormatted,
+    ci: selectedCI ? [selectedCI.ref] : [],
+    cc: selectedCCs.map(e => e.ref),
+    cp: cpRefs.slice(0, 10),
+    psf: [...psfViolated],
+    // Store full text for report
+    ciText: selectedCI ? selectedCI.text : '',
+    ccTexts: selectedCCs.map(e => ({ref: e.ref, text: e.text})),
+  };
+
+  customAccidents.push(acc);
+  document.getElementById('save-modal').classList.remove('open');
+
+  // Clear form
+  ['s-name','s-site','s-desc','s-day','s-year-field'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  const sm = document.getElementById('s-month'); if(sm) sm.value = '';
+
+  // Show success and go to Mes accidents
+  showPage('mes-accidents');
+  renderMesAccidents();
+
+  // Flash confirmation
+  setTimeout(() => alert(`✅ "${name}" sauvegardé dans "Mes accidents".`), 100);
+}
+
+// ════════════════════════════════════════════════════════════
+// MES ACCIDENTS PAGE
+// ════════════════════════════════════════════════════════════
+function renderMesAccidents() {
+  const internal = customAccidents.filter(a => a.type === 'internal');
+  const empty = document.getElementById('mes-accidents-empty');
+  const list  = document.getElementById('mes-accidents-list');
+  const grid  = document.getElementById('mes-accidents-grid');
+
+  if (!internal.length) {
+    empty.style.display = 'block';
+    list.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  list.style.display = 'block';
+  grid.innerHTML = '';
+
+  internal.slice().reverse().forEach(acc => {
+    const card = document.createElement('div');
+    card.className = 'my-acc-card';
+
+    const gravityLabels = ['','Mineur','Significatif','Sérieux','Majeur','Catastrophique'];
+    const causesTags = [
+      ...(acc.ci||[]).map(r=>`<span class="acc-cause-tag ci">${r}</span>`),
+      ...(acc.cc||[]).map(r=>`<span class="acc-cause-tag cc">${r}</span>`),
+      ...(acc.psf||[]).map(n=>`<span class="psf-badge" style="font-size:9px;">⬡ PSF #${n}</span>`),
+    ].join('');
+
+    card.innerHTML = `
+      <div class="my-acc-card-header">
+        <div>
+          <div class="my-acc-card-name">${acc.name}</div>
+          <div class="my-acc-card-meta">${acc.dateFormatted || acc.year} · ${acc.location} · Investigué le ${acc.investigationDate||'—'}</div>
+        </div>
+        <span class="gravity-badge gravity-${acc.gravity||3}">G${acc.gravity||3} — ${gravityLabels[acc.gravity||3]}</span>
+      </div>
+      <div class="my-acc-card-body">
+        <div class="my-acc-card-desc">${acc.desc}</div>
+        <div class="my-acc-causes">${causesTags}</div>
+        <div class="my-acc-card-actions">
+          <button class="btn-sm btn-sm-report" onclick="openReport('${acc.id}')">📋 Rapport</button>
+          <button class="btn-sm btn-sm-compare" onclick="openComparison('${acc.id}')">🔍 Comparer</button>
+          <button class="btn-sm btn-sm-delete" onclick="deleteAccident('${acc.id}')">🗑</button>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function deleteAccident(id) {
+  if (!confirm('Supprimer cet accident ?')) return;
+  customAccidents = customAccidents.filter(a => a.id !== id);
+  renderMesAccidents();
+}
+
+// ════════════════════════════════════════════════════════════
+// EXPORT FUNCTIONS
+// ════════════════════════════════════════════════════════════
+
+function getExportData(source) {
+  const accidents = source === 'internal'
+    ? customAccidents.filter(a => a.type === 'internal')
+    : [...KNOWN_ACCIDENTS, ...customAccidents];
+
+  // Sheet 1: Accidents summary
+  const accRows = accidents.map(a => ({
+    'Nom': a.name,
+    'Date': a.dateFormatted || a.year,
+    'Année': a.year,
+    'Site': a.location || '—',
+    'Gravité': a.gravity ? 'G' + a.gravity + ' — ' + ['','Mineur','Significatif','Sérieux','Majeur','Catastrophique'][a.gravity] : '—',
+    'Description': a.desc || '—',
+    'Cause Immédiate': a.ci ? a.ci.map(r => r + ' — ' + getCauseText('ci',r)).join(' | ') : '—',
+    'Causes Contributives': a.cc ? a.cc.map(r => r + ' — ' + getCauseText('cc',r)).join(' | ') : '—',
+    'Causes Profondes': a.cp ? a.cp.map(r => r + ' — ' + getCauseText('cp',r)).join(' | ') : '—',
+    'PSF non respectés': a.psf ? a.psf.map(n => PSF[n] ? PSF[n].label : n).join(' | ') : '—',
+    'Type': a.type === 'internal' ? 'Interne' : 'Référence',
+  }));
+
+  // Sheet 2: Actions correctives
+  const actionRows = [];
+  accidents.filter(a => a.cp && a.cp.length > 0).forEach(a => {
+    (a.cp || []).forEach(cpRef => {
+      const baseActions = SMART_ACTIONS[cpRef];
+      if (!baseActions) return;
+      const custom = a.customActions || {};
+      const horizonLabels = { court:'Court terme ≤ 3 mois', moyen:'Moyen terme ≤ 12 mois', long:'Long terme > 12 mois' };
+      baseActions.forEach((act, i) => {
+        const k = cpRef + '_' + i;
+        const s = custom[k] || {};
+        actionRows.push({
+          'Accident': a.name,
+          'Date': a.dateFormatted || a.year,
+          'Site': a.location || '—',
+          'Cause Profonde': cpRef + ' — ' + getCauseText('cp', cpRef),
+          'Horizon': horizonLabels[act.h] || act.h,
+          'Action': s.text  !== undefined ? s.text  : act.text,
+          'Responsable': s.owner !== undefined ? s.owner : act.owner,
+          'KPI': s.kpi   !== undefined ? s.kpi   : act.kpi,
+          'Statut': '',
+        });
+      });
+    });
+  });
+
+  // Sheet 3: PSF violations
+  const psfRows = [];
+  accidents.forEach(a => {
+    const violated = new Set();
+    (a.ci||[]).forEach(r => (LINKS_CI_PSF[r]||[]).forEach(n => violated.add(n)));
+    (a.cc||[]).forEach(r => (LINKS_CC_PSF[r]||[]).forEach(n => violated.add(n)));
+    violated.forEach(n => {
+      psfRows.push({
+        'Accident': a.name,
+        'Date': a.dateFormatted || a.year,
+        'Site': a.location || '—',
+        'PSF': PSF[n] ? PSF[n].label : 'PSF #' + n,
+        'Description': PSF[n] ? PSF[n].short : '—',
+      });
+    });
+  });
+
+  return { accRows, actionRows, psfRows };
+}
+
+function exportToExcel(source) {
+  if (typeof XLSX === 'undefined') {
+    alert('Bibliothèque Excel non chargée. Vérifiez votre connexion internet.');
+    return;
+  }
+  const data = getExportData(source);
+  if (data.accRows.length === 0) { alert('Aucun accident à exporter.'); return; }
+
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1 — Accidents
+  const ws1 = XLSX.utils.json_to_sheet(data.accRows);
+  ws1['!cols'] = [
+    {wch:30},{wch:16},{wch:8},{wch:20},{wch:18},{wch:50},
+    {wch:50},{wch:60},{wch:60},{wch:40},{wch:12}
+  ];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Accidents');
+
+  // Sheet 2 — Actions correctives
+  if (data.actionRows.length > 0) {
+    const ws2 = XLSX.utils.json_to_sheet(data.actionRows);
+    ws2['!cols'] = [{wch:30},{wch:16},{wch:20},{wch:50},{wch:22},{wch:70},{wch:25},{wch:50},{wch:15}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Actions correctives');
+  }
+
+  // Sheet 3 — PSF
+  if (data.psfRows.length > 0) {
+    const ws3 = XLSX.utils.json_to_sheet(data.psfRows);
+    ws3['!cols'] = [{wch:30},{wch:16},{wch:20},{wch:22},{wch:70}];
+    XLSX.utils.book_append_sheet(wb, ws3, 'PSF violés');
+  }
+
+  const fname = source === 'internal' ? 'mes_accidents_HSE.xlsx' : 'tous_accidents_HSE.xlsx';
+  XLSX.writeFile(wb, fname);
+}
+
+function exportToCSV(source) {
+  const data = getExportData(source);
+  if (data.accRows.length === 0) { alert('Aucun accident à exporter.'); return; }
+
+  function toCSV(rows) {
+    if (!rows.length) return '';
+    const headers = Object.keys(rows[0]);
+    const escape = v => '"' + String(v || '').replace(/"/g, '""') + '"';
+    return [headers.map(escape).join(','),
+      ...rows.map(r => headers.map(h => escape(r[h])).join(','))
+    ].join('\r\n');
+  }
+
+  // Export 3 CSVs as separate downloads
+  const download = (content, filename) => {
+    const bom = '\uFEFF'; // UTF-8 BOM for Excel compatibility
+    const blob = new Blob([bom + content], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+  };
+
+  const prefix = source === 'internal' ? 'mes' : 'tous';
+  download(toCSV(data.accRows),    `${prefix}_accidents_HSE.csv`);
+  if (data.actionRows.length > 0) {
+    setTimeout(() => download(toCSV(data.actionRows), `${prefix}_actions_HSE.csv`), 300);
+  }
+  if (data.psfRows.length > 0) {
+    setTimeout(() => download(toCSV(data.psfRows),    `${prefix}_PSF_HSE.csv`), 600);
+  }
+}
+
+function exportAccidents() { exportToExcel('internal'); }
+
+// ════════════════════════════════════════════════════════════
+// RAPPORT D'INVESTIGATION
+// ════════════════════════════════════════════════════════════
+function openReport(id) {
+  const acc = customAccidents.find(a => a.id === id);
+  if (!acc) return;
+
+  document.getElementById('report-title').textContent = '📋 ' + acc.name;
+  document.getElementById('report-sub').textContent =
+    (acc.dateFormatted || acc.year) + ' · ' + acc.location + ' · Gravité ' + (acc.gravity||'—') + ' · ' + (acc.investigationDate||'—');
+
+  if (!acc.customActions) acc.customActions = {};
+
+  const horizonColors = { court:'var(--ci-mid)', moyen:'var(--cc-mid)', long:'var(--cp-mid)' };
+  const horizonLabels = { court:'Court terme ≤ 3 mois', moyen:'Moyen terme ≤ 12 mois', long:'Long terme > 12 mois' };
+
+  const body = document.getElementById('report-body');
+  body.innerHTML = '';
+
+  // Helper: create a section
+  function section(title, contentEl) {
+    const div = document.createElement('div');
+    div.className = 'report-section';
+    const t = document.createElement('div');
+    t.className = 'report-section-title';
+    t.textContent = title;
+    div.appendChild(t);
+    div.appendChild(contentEl);
+    body.appendChild(div);
+  }
+
+  // Helper: cause row with tooltip on ref
+  function causeRow(ref, text, color) {
+    const row = document.createElement('div');
+    row.className = 'report-cause-row';
+    const refSpan = document.createElement('span');
+    refSpan.className = 'report-ref report-ref-tip';
+    refSpan.style.color = color;
+    refSpan.textContent = ref;
+    refSpan.title = text;
+    // Tooltip bubble
+    const tip = document.createElement('span');
+    tip.className = 'report-tip-bubble';
+    tip.textContent = text;
+    refSpan.appendChild(tip);
+    const textSpan = document.createElement('span');
+    textSpan.className = 'report-text';
+    textSpan.textContent = text;
+    row.appendChild(refSpan);
+    row.appendChild(textSpan);
+    return row;
+  }
+
+  // Description
+  const descEl = document.createElement('div');
+  descEl.style.cssText = 'font-size:12px;color:var(--text);line-height:1.7;';
+  descEl.textContent = acc.desc;
+  section('Description', descEl);
+
+  // CI
+  const ciEl = document.createElement('div');
+  ciEl.appendChild(causeRow(acc.ci[0]||'—', acc.ciText||getCauseText('ci',acc.ci[0]), 'var(--ci-mid)'));
+  section('Cause Immédiate', ciEl);
+
+  // CC
+  const ccEl = document.createElement('div');
+  const ccList = acc.ccTexts || acc.cc.map(r => ({ref:r, text:getCauseText('cc',r)}));
+  if (ccList.length === 0) {
+    ccEl.innerHTML = '<div style="color:var(--text-dimmer);font-style:italic;">Non renseignées</div>';
+  } else {
+    ccList.forEach(e => ccEl.appendChild(causeRow(e.ref, e.text, 'var(--cc-mid)')));
+  }
+  section('Causes Contributives (' + (acc.cc||[]).length + ')', ccEl);
+
+  // CP
+  const cpEl = document.createElement('div');
+  if (!acc.cp || !acc.cp.length) {
+    cpEl.innerHTML = '<div style="color:var(--text-dimmer);font-style:italic;">Non renseignées</div>';
+  } else {
+    acc.cp.forEach(r => cpEl.appendChild(causeRow(r, getCauseText('cp',r), 'var(--cp-mid)')));
+  }
+  section('Causes Profondes (' + (acc.cp||[]).length + ')', cpEl);
+
+  // PSF
+  if (acc.psf && acc.psf.length > 0) {
+    const psfEl = document.createElement('div');
+    acc.psf.forEach(n => {
+      const d = document.createElement('div');
+      d.style.cssText = 'margin-bottom:8px;padding:8px 12px;background:rgba(230,168,23,.1);border-radius:6px;border-left:3px solid #E6A817;';
+      d.innerHTML = '<div style="font-size:11px;font-weight:700;color:#E6C55A;margin-bottom:2px;">⬡ ' + PSF[n].label + '</div>' +
+                    '<div style="font-size:11px;color:var(--text-dim);">' + PSF[n].short + '</div>';
+      psfEl.appendChild(d);
+    });
+    section('PSF non respectés', psfEl);
+  }
+
+  // SMART Actions — fully editable
+  const actSection = document.createElement('div');
+  const actTitle = document.createElement('div');
+  actTitle.className = 'report-section-title';
+  actTitle.innerHTML = 'Actions correctives SMART <span style="font-size:10px;font-weight:400;color:var(--text-dimmer);font-style:italic;text-transform:none;letter-spacing:0;">— modifiez les champs ci-dessous</span>';
+  const actBody = document.createElement('div');
+  actSection.className = 'report-section';
+  actSection.appendChild(actTitle);
+  actSection.appendChild(actBody);
+
+  const cpWithActions = (acc.cp||[]).filter(r => SMART_ACTIONS[r] && SMART_ACTIONS[r].length > 0);
+
+  if (cpWithActions.length === 0) {
+    actBody.innerHTML = '<div style="color:var(--text-dimmer);font-style:italic;font-size:12px;">Aucune action SMART définie pour les causes profondes de cet accident.</div>';
+  } else {
+    cpWithActions.forEach(cpRef => {
+      const baseActions = SMART_ACTIONS[cpRef];
+      const card = document.createElement('div');
+      card.className = 'action-card';
+
+      const cardTitle = document.createElement('div');
+      cardTitle.className = 'action-cp-title';
+      cardTitle.textContent = cpRef + ' — ' + getCauseText('cp', cpRef);
+      card.appendChild(cardTitle);
+
+      baseActions.forEach((a, i) => {
+        const key = cpRef + '_' + i;
+        const saved = acc.customActions[key] || {};
+        const textVal  = saved.text  !== undefined ? saved.text  : a.text;
+        const ownerVal = saved.owner !== undefined ? saved.owner : a.owner;
+        const kpiVal   = saved.kpi   !== undefined ? saved.kpi   : a.kpi;
+
+        const row = document.createElement('div');
+        row.className = 'action-row';
+        row.id = 'action-row-' + key;
+
+        // Horizon badge
+        const badge = document.createElement('div');
+        badge.className = 'action-horizon-badge';
+        badge.style.color = horizonColors[a.h];
+        badge.textContent = horizonLabels[a.h];
+        row.appendChild(badge);
+
+        // Fields container
+        const fields = document.createElement('div');
+        fields.className = 'action-fields';
+
+        // Action text
+        const textWrap = document.createElement('div');
+        const textLabel = document.createElement('div');
+        textLabel.className = 'action-field-label';
+        textLabel.textContent = 'Action';
+        const ta = document.createElement('textarea');
+        ta.className = 'action-editable';
+        ta.rows = 3;
+        ta.placeholder = "Description de l'action...";
+        ta.value = textVal;
+        ta.addEventListener('input', function() { saveActionField(id, key, 'text', this.value); });
+        textWrap.appendChild(textLabel);
+        textWrap.appendChild(ta);
+        fields.appendChild(textWrap);
+
+        // Meta row: owner + KPI
+        const metaRow = document.createElement('div');
+        metaRow.className = 'action-meta-row';
+
+        const ownerWrap = document.createElement('div');
+        const ownerLabel = document.createElement('div');
+        ownerLabel.className = 'action-field-label';
+        ownerLabel.textContent = '👤 Responsable';
+        const ownerInput = document.createElement('input');
+        ownerInput.type = 'text';
+        ownerInput.className = 'action-editable';
+        ownerInput.value = ownerVal;
+        ownerInput.placeholder = 'Nom du responsable';
+        ownerInput.addEventListener('input', function() { saveActionField(id, key, 'owner', this.value); });
+        ownerWrap.appendChild(ownerLabel);
+        ownerWrap.appendChild(ownerInput);
+
+        const kpiWrap = document.createElement('div');
+        const kpiLabel = document.createElement('div');
+        kpiLabel.className = 'action-field-label';
+        kpiLabel.textContent = '📏 KPI / Indicateur';
+        const kpiInput = document.createElement('input');
+        kpiInput.type = 'text';
+        kpiInput.className = 'action-editable';
+        kpiInput.value = kpiVal;
+        kpiInput.placeholder = 'Indicateur de suivi';
+        kpiInput.addEventListener('input', function() { saveActionField(id, key, 'kpi', this.value); });
+        kpiWrap.appendChild(kpiLabel);
+        kpiWrap.appendChild(kpiInput);
+
+        metaRow.appendChild(ownerWrap);
+        metaRow.appendChild(kpiWrap);
+        fields.appendChild(metaRow);
+
+        // Saved indicator
+        const savedInd = document.createElement('span');
+        savedInd.className = 'action-saved-indicator';
+        savedInd.id = 'saved-' + key;
+        savedInd.textContent = '✓';
+
+        row.appendChild(fields);
+        row.appendChild(savedInd);
+        card.appendChild(row);
+      });
+
+      actBody.appendChild(card);
+    });
+  }
+
+  body.appendChild(actSection);
+  setReportAccId(id);
+  document.getElementById('report-modal').classList.add('open');
+}
+
+// Save a single action field edit back into the accident object
+function saveActionField(accId, key, field, value) {
+  const acc = customAccidents.find(a => a.id === accId);
+  if (!acc) return;
+  if (!acc.customActions) acc.customActions = {};
+  if (!acc.customActions[key]) acc.customActions[key] = {};
+  acc.customActions[key][field] = value;
+  // Flash saved indicator
+  const indicator = document.getElementById('saved-' + key);
+  if (indicator) {
+    indicator.classList.add('show');
+    clearTimeout(indicator._timer);
+    indicator._timer = setTimeout(() => indicator.classList.remove('show'), 1500);
+  }
+}
+
+function closeReportModal(e) {
+  if (!e || e.target === document.getElementById('report-modal'))
+    document.getElementById('report-modal').classList.remove('open');
+}
+
+function printReport() {
+  const accId = document.getElementById('report-modal').dataset.accId;
+  const acc = accId ? customAccidents.find(a => a.id === accId) : null;
+  if (!acc) { window.print(); return; }
+
+  const horizonLabels = { court:'Court terme ≤ 3 mois', moyen:'Moyen terme ≤ 12 mois', long:'Long terme > 12 mois' };
+  const horizonColors = { court:'#C0392B', moyen:'#D35400', long:'#1E8449' };
+  const monthNames = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+
+  // Build print sections
+  const ciText = acc.ciText || getCauseText('ci', acc.ci[0]);
+  const ccRows = (acc.ccTexts || acc.cc.map(r => ({ref:r, text:getCauseText('cc',r)}))).map(e =>
+    `<tr><td style="color:#D35400;font-family:monospace;font-weight:700;white-space:nowrap;padding:5px 10px 5px 0;vertical-align:top;">${e.ref}</td><td style="padding:5px 0;">${e.text}</td></tr>`).join('');
+  const cpRows = (acc.cp||[]).map(r =>
+    `<tr><td style="color:#1E8449;font-family:monospace;font-weight:700;white-space:nowrap;padding:5px 10px 5px 0;vertical-align:top;">${r}</td><td style="padding:5px 0;">${getCauseText('cp',r)}</td></tr>`).join('');
+
+  const psfSection = (acc.psf||[]).length === 0 ? '' : `
+    <div class="section">
+      <div class="section-title">PSF non respectés</div>
+      ${(acc.psf||[]).map(n => `<div style="margin-bottom:6px;padding:7px 10px;background:#FFF8E1;border-left:3px solid #E6A817;border-radius:4px;">
+        <strong style="color:#B8860B;">⬡ ${PSF[n].label}</strong><br>
+        <span style="font-size:11px;color:#555;">${PSF[n].short}</span>
+      </div>`).join('')}
+    </div>`;
+
+  const cpWithActions = (acc.cp||[]).filter(r => SMART_ACTIONS[r] && SMART_ACTIONS[r].length > 0);
+  const actionsSection = cpWithActions.length === 0 ? '' : `
+    <div class="section">
+      <div class="section-title">Actions correctives SMART</div>
+      ${cpWithActions.map(cpRef => {
+        const baseActions = SMART_ACTIONS[cpRef];
+        const custom = acc.customActions || {};
+        return `<div style="margin-bottom:14px;border-left:3px solid #1E8449;padding-left:10px;">
+          <div style="font-size:11px;font-weight:700;color:#1E8449;margin-bottom:8px;">${cpRef} — ${getCauseText('cp',cpRef)}</div>
+          ${baseActions.map((a,i) => {
+            const k = cpRef+'_'+i;
+            const s = custom[k] || {};
+            const txt   = s.text  !== undefined ? s.text  : a.text;
+            const owner = s.owner !== undefined ? s.owner : a.owner;
+            const kpi   = s.kpi   !== undefined ? s.kpi   : a.kpi;
+            return `<div style="margin-bottom:8px;padding:8px;background:#F8F9FA;border-radius:4px;">
+              <div style="font-size:9px;font-weight:700;color:${horizonColors[a.h]};text-transform:uppercase;margin-bottom:4px;">${horizonLabels[a.h]}</div>
+              <div style="font-size:11px;color:#222;margin-bottom:5px;">${txt}</div>
+              <div style="font-size:10px;color:#666;">👤 ${owner} &nbsp;|&nbsp; 📏 ${kpi}</div>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  const logoEl = document.getElementById('company-logo');
+  const logoHtml = logoEl && logoEl.src && logoEl.src !== window.location.href
+    ? `<img src="${logoEl.src}" style="height:40px;float:right;">` : '';
+
+  const gravityLabels = ['','Mineur','Significatif','Sérieux','Majeur','Catastrophique'];
+  const gravityColors = ['','#2ECC71','#F1C40F','#E67E22','#E74C3C','#C0392B'];
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Rapport — ${acc.name}</title>
+<style>
+  body{font-family:'Segoe UI',Arial,sans-serif;color:#222;margin:0;padding:0;font-size:12px;line-height:1.6;}
+  .page{padding:30px 40px;max-width:800px;margin:0 auto;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #1E8449;}
+  .header-left{}
+  .report-title{font-size:22px;font-weight:700;color:#1A1A2E;margin-bottom:4px;}
+  .report-meta{font-size:11px;color:#666;}
+  .gravity-badge{display:inline-block;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;margin-left:8px;}
+  .section{margin-bottom:20px;}
+  .section-title{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#888;padding:5px 0;border-bottom:1px solid #E0E0E0;margin-bottom:10px;}
+  table{width:100%;border-collapse:collapse;}
+  .footer{margin-top:30px;padding-top:12px;border-top:1px solid #E0E0E0;font-size:10px;color:#AAA;display:flex;justify-content:space-between;}
+  @page{margin:20mm;}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div class="header-left">
+      <div class="report-title">📋 ${acc.name}</div>
+      <div class="report-meta">
+        ${acc.dateFormatted || acc.year} &nbsp;·&nbsp; ${acc.location}
+        <span class="gravity-badge" style="background:${gravityColors[acc.gravity||3]}22;color:${gravityColors[acc.gravity||3]};border:1px solid ${gravityColors[acc.gravity||3]}44;">
+          G${acc.gravity||3} — ${gravityLabels[acc.gravity||3]}
+        </span>
+      </div>
+    </div>
+    <div>${logoHtml}</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Description</div>
+    <p style="margin:0;color:#333;">${acc.desc}</p>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Cause Immédiate</div>
+    <table><tr>
+      <td style="color:#C0392B;font-family:monospace;font-weight:700;white-space:nowrap;padding:5px 10px 5px 0;vertical-align:top;">${acc.ci[0]||'—'}</td>
+      <td style="padding:5px 0;">${ciText}</td>
+    </tr></table>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Causes Contributives (${(acc.cc||[]).length})</div>
+    <table>${ccRows || '<tr><td style="color:#999;font-style:italic;">Non renseignées</td></tr>'}</table>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Causes Profondes (${(acc.cp||[]).length})</div>
+    <table>${cpRows || '<tr><td style="color:#999;font-style:italic;">Non renseignées</td></tr>'}</table>
+  </div>
+
+  ${psfSection}
+  ${actionsSection}
+
+  <div class="footer">
+    <span>Root Cause Explorer — Rapport d'investigation HSE Process Safety</span>
+    <span>Généré le ${new Date().toLocaleDateString('fr-FR', {day:'2-digit',month:'long',year:'numeric'})}</span>
+  </div>
+</div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  win.document.write(html);
+  win.document.close();
+  win.onload = () => { win.focus(); win.print(); };
+}
+
+// Store current report accId for print
+function setReportAccId(id) {
+  document.getElementById('report-modal').dataset.accId = id;
+}
+
+// ════════════════════════════════════════════════════════════
+// COMPARAISON AVEC ACCIDENTS CONNUS
+// ════════════════════════════════════════════════════════════
+function openComparison(id) {
+  const acc = customAccidents.find(a => a.id === id);
+  if (!acc) return;
+
+  const known = KNOWN_ACCIDENTS;
+  const myCIs = new Set(acc.ci||[]);
+  const myCCs = new Set(acc.cc||[]);
+  const myCPs = new Set(acc.cp||[]);
+  const myPSFs = new Set(acc.psf||[]);
+
+  // Score similarity
+  const scored = known.map(k => {
+    const sharedCI = (k.ci||[]).filter(r => myCIs.has(r));
+    const sharedCC = (k.cc||[]).filter(r => myCCs.has(r));
+    const sharedCP = (k.cp||[]).filter(r => myCPs.has(r));
+    const kPSFs = new Set();
+    (k.ci||[]).forEach(r => (LINKS_CI_PSF[r]||[]).forEach(n=>kPSFs.add(n)));
+    (k.cc||[]).forEach(r => (LINKS_CC_PSF[r]||[]).forEach(n=>kPSFs.add(n)));
+    const sharedPSF = [...kPSFs].filter(n => myPSFs.has(n));
+    const score = sharedCI.length*3 + sharedCC.length*2 + sharedCP.length + sharedPSF.length;
+    return {acc:k, sharedCI, sharedCC, sharedCP, sharedPSF, score};
+  }).filter(x => x.score > 0).sort((a,b) => b.score - a.score);
+
+  document.getElementById('report-title').textContent = '🔍 Comparaison — ' + acc.name;
+  document.getElementById('report-sub').textContent = 'Accidents connus avec des causes similaires';
+
+  if (!scored.length) {
+    document.getElementById('report-body').innerHTML =
+      '<div style="text-align:center;padding:30px;color:var(--text-dimmer);font-style:italic;">Aucun accident connu ne partage les mêmes causes.</div>';
+  } else {
+    document.getElementById('report-body').innerHTML = scored.map(s => `
+      <div class="compare-section">
+        <div class="compare-acc-name" style="cursor:pointer;color:var(--acc-mid);" onclick="openAccidentModal(${JSON.stringify(s.acc).replace(/"/g,'&quot;')})">${s.acc.name} (${s.acc.year}) — ${s.acc.location}</div>
+        <div class="compare-shared">
+          ${s.sharedCI.map(r=>`<span class="acc-cause-tag ci" title="${getCauseText('ci',r)}">${r}</span>`).join('')}
+          ${s.sharedCC.map(r=>`<span class="acc-cause-tag cc" title="${getCauseText('cc',r)}">${r}</span>`).join('')}
+          ${s.sharedCP.map(r=>`<span class="acc-cause-tag cp" title="${getCauseText('cp',r)}">${r}</span>`).join('')}
+          ${s.sharedPSF.map(n=>`<span class="psf-badge" style="font-size:9px;">⬡ PSF #${n}</span>`).join('')}
+        </div>
+        <div style="font-size:10px;color:var(--text-dimmer);margin-top:6px;font-style:italic;">${s.acc.desc}</div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('report-modal').classList.add('open');
+}
+
+// Helper: get cause text from ref
+function getCauseText(type, ref) {
+  if (!ref) return '—';
+  for (const group of DATA[type]||[]) {
+    for (const entry of group.entries) {
+      if (entry.ref === ref) return entry.text;
+    }
+  }
+  return ref;
+}
+
+// ════════════════════════════════════════════════════════════
+// PSF MODAL
+// ════════════════════════════════════════════════════════════
+function openPSFModal(num) {
+  const psf = PSF[num];
+  document.getElementById('psf-modal-num').textContent = psf.label;
+  document.getElementById('psf-modal-title').textContent = psf.short;
+  document.getElementById('psf-modal-desc').textContent = psf.full;
+  const accs = getAccidentsForPSF(num);
+  const accList = document.getElementById('psf-modal-accidents');
+  accList.innerHTML = accs.length > 0
+    ? '<div style="font-size:10px;color:var(--text-dim);margin-bottom:6px;font-style:italic;">Accidents liés :</div>'
+    : '';
+  accs.forEach(a => {
+    const el = document.createElement('span');
+    el.className = 'psf-acc-item';
+    el.textContent = a.name + ' (' + a.year + ')';
+    el.onclick = () => { closePSFModal(); openAccidentModal(a); };
+    accList.appendChild(el);
+  });
+  document.getElementById('psf-modal').classList.add('open');
+}
+
+function closePSFModal(e) {
+  if (!e || e.target === document.getElementById('psf-modal')) {
+    document.getElementById('psf-modal').classList.remove('open');
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// ANALYTICS / CHARTS
+// ════════════════════════════════════════════════════════════
+let charts = {};
+let analyticsFilter = 'all'; // 'all' | 'internal' | 'known'
+
+function setAnalyticsFilter(mode) {
+  analyticsFilter = mode;
+  // Update button states
+  ['all','internal','known'].forEach(m => {
+    const btn = document.getElementById('filter-' + m);
+    if (btn) btn.classList.toggle('active', m === mode);
+  });
+  // Update subtitle
+  const subtitles = {
+    all: 'Tous les accidents — référence + vos accidents internes',
+    internal: 'Vos accidents internes uniquement',
+    known: 'Accidents de référence uniquement (Texas City, Deepwater, Piper Alpha…)',
+  };
+  const sub = document.getElementById('analytics-subtitle');
+  if (sub) sub.textContent = subtitles[mode];
+  buildCharts();
+}
+
+function buildCharts() {
+  // Select dataset based on filter
+  let all;
+  if (analyticsFilter === 'internal') {
+    all = customAccidents.filter(a => a.type === 'internal');
+  } else if (analyticsFilter === 'known') {
+    all = [...KNOWN_ACCIDENTS];
+  } else {
+    all = [...KNOWN_ACCIDENTS, ...customAccidents];
+  }
+
+  // Show empty state if no internal accidents when filter is 'internal'
+  const emptyDiv = document.getElementById('analytics-empty');
+  const contentDiv = document.getElementById('analytics-content');
+  if (analyticsFilter === 'internal' && all.length === 0) {
+    if (emptyDiv) emptyDiv.style.display = 'block';
+    if (contentDiv) contentDiv.style.display = 'none';
+    return;
+  }
+  if (emptyDiv) emptyDiv.style.display = 'none';
+  if (contentDiv) contentDiv.style.display = 'block';
+
+  // Count frequency of each cause ref
+  function countFreq(type) {
+    const freq = {};
+    all.forEach(a => (a[type]||[]).forEach(ref => { freq[ref] = (freq[ref]||0) + 1; }));
+    return Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  }
+
+  const ciFreq = countFreq('ci');
+  const ccFreq = countFreq('cc');
+  const cpFreq = countFreq('cp');
+
+  // Decade distribution
+  const decades = {};
+  all.forEach(a => {
+    const d = Math.floor(a.year/10)*10;
+    decades[d] = (decades[d]||0) + 1;
+  });
+  const decadeKeys = Object.keys(decades).sort();
+
+  const chartCfg = (labels, data, color, label) => ({
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ label, data, backgroundColor: color + 'CC', borderColor: color, borderWidth: 1, borderRadius: 4 }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2A2F3F' }, ticks: { color: '#8892A4', font: { size: 10 } } },
+        y: { grid: { display: false }, ticks: { color: '#E8EAF0', font: { family: 'IBM Plex Mono', size: 9 } } }
+      }
+    }
+  });
+
+  function destroyAndCreate(id, cfg) {
+    if (charts[id]) { charts[id].destroy(); }
+    charts[id] = new Chart(document.getElementById(id), cfg);
+  }
+
+  const filterLabel = analyticsFilter === 'internal' ? 'vos accidents internes' :
+                      analyticsFilter === 'known' ? 'les accidents de référence' :
+                      'tous les accidents';
+
+  destroyAndCreate('chart-ci', chartCfg(
+    ciFreq.map(x=>x[0]), ciFreq.map(x=>x[1]), '#E74C3C', 'Occurrences'));
+  destroyAndCreate('chart-cc', chartCfg(
+    ccFreq.map(x=>x[0]), ccFreq.map(x=>x[1]), '#E67E22', 'Occurrences'));
+  destroyAndCreate('chart-cp', chartCfg(
+    cpFreq.map(x=>x[0]), cpFreq.map(x=>x[1]), '#1E8449', 'Occurrences'));
+
+  // Update chart subtitles dynamically
+  document.querySelectorAll('.chart-sub').forEach((el, i) => {
+    if (i < 4) el.textContent = `Fréquence dans ${filterLabel} (${all.length} accident${all.length>1?'s':''})`;
+  });
+
+  // Timeline chart (vertical bar)
+  if (charts['chart-timeline']) charts['chart-timeline'].destroy();
+  charts['chart-timeline'] = new Chart(document.getElementById('chart-timeline'), {
+    type: 'bar',
+    data: {
+      labels: decadeKeys.map(d => d+'s'),
+      datasets: [{ label: 'Accidents', data: decadeKeys.map(d=>decades[d]),
+        backgroundColor: '#9B59B6CC', borderColor: '#9B59B6', borderWidth: 1, borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2A2F3F' }, ticks: { color: '#8892A4', font: { size: 10 } } },
+        y: { grid: { color: '#2A2F3F' }, ticks: { color: '#8892A4', font: { size: 10 }, stepSize: 1 } }
+      }
+    }
+  });
+
+  // Full timeline list
+  buildFullTimeline();
+
+  // PSF frequency chart
+  buildPSFCharts(all);
+} // end buildCharts
+
+function buildPSFCharts(all) {
+  // Count violations per PSF across all accidents
+  const psfFreq = {};
+  for (let n = 1; n <= 10; n++) psfFreq[n] = 0;
+  all.forEach(a => {
+    const violated = new Set();
+    (a.ci||[]).forEach(r => (LINKS_CI_PSF[r]||[]).forEach(n => violated.add(n)));
+    (a.cc||[]).forEach(r => (LINKS_CC_PSF[r]||[]).forEach(n => violated.add(n)));
+    violated.forEach(n => psfFreq[n]++);
+  });
+
+  const psfLabels = Object.keys(psfFreq).map(n => `PSF #${n}`);
+  const psfData   = Object.values(psfFreq);
+  const psfColors = psfData.map(v => v === 0 ? '#2A2F3F' : `rgba(230,168,23,${0.3 + (v / Math.max(...psfData)) * 0.7})`);
+  const psfBorders = psfData.map(v => v === 0 ? '#2A2F3F' : '#E6A817');
+
+  if (charts['chart-psf-freq']) charts['chart-psf-freq'].destroy();
+  charts['chart-psf-freq'] = new Chart(document.getElementById('chart-psf-freq'), {
+    type: 'bar',
+    data: {
+      labels: psfLabels,
+      datasets: [{
+        label: 'Accidents concernés',
+        data: psfData,
+        backgroundColor: psfColors,
+        borderColor: psfBorders,
+        borderWidth: 1,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      onClick: (evt, elements) => {
+        if (elements.length > 0) {
+          const idx = elements[0].index + 1;
+          openPSFModal(idx);
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: (ctx) => {
+              const n = ctx.dataIndex + 1;
+              const accs = getAccidentsForPSF(n);
+              return accs.length > 0 ? '→ ' + accs.map(a => a.name).join(', ') : '';
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: '#2A2F3F' }, ticks: { color: '#8892A4', font: { size: 10 }, stepSize: 1 } },
+        y: { grid: { display: false }, ticks: { color: '#E6C55A', font: { family: 'IBM Plex Mono', size: 10 } } }
+      }
+    }
+  });
+
+  // PSF trend by decade
+  const decades = [...new Set(all.map(a => Math.floor(a.year/10)*10))].sort();
+  const top5psf = Object.entries(psfFreq).sort((a,b)=>b[1]-a[1]).slice(0,5).map(x=>parseInt(x[0]));
+
+  const trendColors = ['#E74C3C','#E67E22','#F1C40F','#1E8449','#3498DB'];
+  const trendDatasets = top5psf.map((psfNum, i) => {
+    const data = decades.map(decade => {
+      const decadeAccs = all.filter(a => Math.floor(a.year/10)*10 === decade);
+      const count = decadeAccs.filter(a => {
+        const v = new Set();
+        (a.ci||[]).forEach(r => (LINKS_CI_PSF[r]||[]).forEach(n => v.add(n)));
+        (a.cc||[]).forEach(r => (LINKS_CC_PSF[r]||[]).forEach(n => v.add(n)));
+        return v.has(psfNum);
+      }).length;
+      return count;
+    });
+    return {
+      label: `PSF #${psfNum}`,
+      data,
+      borderColor: trendColors[i],
+      backgroundColor: trendColors[i] + '33',
+      borderWidth: 2,
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      tension: 0.3,
+      fill: false,
+    };
+  });
+
+  if (charts['chart-psf-trend']) charts['chart-psf-trend'].destroy();
+  charts['chart-psf-trend'] = new Chart(document.getElementById('chart-psf-trend'), {
+    type: 'line',
+    data: {
+      labels: decades.map(d => d + 's'),
+      datasets: trendDatasets,
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          labels: { color: '#8892A4', font: { size: 10, family: 'IBM Plex Mono' }, boxWidth: 14 }
+        }
+      },
+      scales: {
+        x: { grid: { color: '#2A2F3F' }, ticks: { color: '#8892A4', font: { size: 10 } } },
+        y: { grid: { color: '#2A2F3F' }, ticks: { color: '#8892A4', font: { size: 10 }, stepSize: 1 } }
+      }
+    }
+  });
+
+} // end buildPSFCharts
+
+function buildFullTimeline() {
+  const container = document.getElementById('full-timeline');
+  container.innerHTML = '';
+  const all = [...KNOWN_ACCIDENTS, ...customAccidents].sort((a,b)=>a.year-b.year);
+  const tl = document.createElement('div');
+  tl.className = 'timeline';
+  all.forEach(acc => {
+    const item = document.createElement('div');
+    item.className = 'tl-item';
+    let tags = '';
+    [...(acc.ci||[]).slice(0,3), ...(acc.cc||[]).slice(0,3), ...(acc.cp||[]).slice(0,2)].forEach(r => {
+      const t = r.startsWith('CI')?'ci':r.startsWith('CC')?'cc':'cp';
+      tags += `<span class="acc-cause-tag ${t}">${r}</span>`;
+    });
+    item.innerHTML = `<div class="tl-year">${acc.year}</div>
+      <div class="tl-name" onclick="openAccidentModal(${JSON.stringify(acc).replace(/"/g,'&quot;')})">${acc.name} <span style="font-size:10px;font-weight:400;color:var(--text-dim);">— ${acc.location}</span></div>
+      <div class="tl-tags" style="margin-top:5px;">${tags}</div>`;
+    tl.appendChild(item);
+  });
+  container.appendChild(tl);
+}
+
+// ════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════
+renderPanel('ci', null);
+updateFooter();
+</script>
+</body>
+</html>
